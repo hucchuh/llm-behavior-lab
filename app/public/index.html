@@ -1,0 +1,469 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>LLM Behavior Lab</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <section class="page landing-page is-visible" data-page="landing">
+      <header class="landing-nav">
+        <div class="brand inline">
+          <span>LLM Behavior Lab</span>
+          <strong>协作式实验设计与运行</strong>
+        </div>
+        <div class="button-row">
+          <button type="button" data-route="auth" data-auth-mode="login">登录</button>
+          <button class="primary" type="button" data-route="auth" data-auth-mode="register">注册</button>
+        </div>
+      </header>
+
+      <main class="landing-hero">
+        <div class="hero-copy">
+          <p class="eyebrow">面向语言模型行为科学</p>
+          <h1>从好奇心到快速可上手的 LLM 行为实验</h1>
+          <p>
+            个人研究者可以直接从需求输入开始；团队可以先围绕研究想法讨论，
+            再进入细节确认，逐步确认实验协议、提示词、模型、预实验和分析报告。
+          </p>
+          <div class="hero-stats" aria-label="产品能力概览">
+            <span>8 步实验流程</span>
+            <span>团队协作记录</span>
+            <span>预实验质量检查</span>
+          </div>
+          <div class="button-row">
+            <button class="primary" type="button" data-route="auth" data-auth-mode="register" data-mode="personal">个人开始实验</button>
+            <button type="button" data-route="auth" data-auth-mode="register" data-mode="team">创建团队工作空间</button>
+            <button type="button" data-action="login-demo" data-mode="team">使用团队演示账号</button>
+          </div>
+        </div>
+
+        <div class="hero-visual abstract-map" aria-label="从好奇心到实验协议的抽象路径">
+          <div class="map-thread">
+            <span>好奇心</span>
+            <i></i>
+            <span>细节确认</span>
+            <i></i>
+            <span>协议</span>
+            <i></i>
+            <span>预实验</span>
+          </div>
+          <div class="map-stack">
+            <div class="map-block is-wide">
+              <span>研究问题</span>
+              <strong>自然语言想法</strong>
+            </div>
+            <div class="map-block">
+              <span>变量</span>
+              <strong>条件与指标</strong>
+            </div>
+            <div class="map-block">
+              <span>模型</span>
+              <strong>运行设置</strong>
+            </div>
+            <div class="map-block is-wide">
+              <span>输出</span>
+              <strong>预实验报告</strong>
+            </div>
+          </div>
+        </div>
+      </main>
+    </section>
+
+    <section class="page auth-page" data-page="auth" hidden>
+      <div class="auth-card">
+        <button class="ghost-link" type="button" data-route="landing">← 返回首页</button>
+        <p class="eyebrow">账号</p>
+        <h1 data-auth-title>登录工作空间</h1>
+        <p>登录后进入实验工作台，继续细节确认、协议生成、预实验和结果导出。</p>
+
+        <div class="auth-tabs">
+          <button class="is-selected" type="button" data-auth-tab="login">登录</button>
+          <button type="button" data-auth-tab="register">注册</button>
+        </div>
+
+        <div class="form-grid single">
+          <label class="field">
+            <span>邮箱</span>
+            <input data-auth-email placeholder="输入邮箱" />
+          </label>
+          <label class="field">
+            <span>密码</span>
+            <input data-auth-password type="password" placeholder="输入密码" />
+          </label>
+        </div>
+
+        <div class="button-row auth-actions">
+          <button class="primary" type="button" data-action="auth-submit">进入实验流程</button>
+          <button type="button" data-action="login-demo">使用演示账号</button>
+        </div>
+      </div>
+    </section>
+
+    <div class="app-shell page" data-page="app" hidden>
+      <aside class="sidebar">
+        <div class="brand">
+          <span>LLM Behavior Lab</span>
+          <strong data-workspace-name>LLM 行为实验小组</strong>
+        </div>
+        <div class="mode-switcher" aria-label="流程模式">
+          <button type="button" data-mode-option="personal">个人模式</button>
+          <button class="is-selected" type="button" data-mode-option="team">团队模式</button>
+        </div>
+        <nav class="steps" aria-label="实验流程">
+          <button class="is-active" type="button" data-step-target="workspace" data-team-only="true"><span>00</span> 小组空间</button>
+          <button type="button" data-step-target="intake"><span>01</span> 需求输入</button>
+          <button type="button" data-step-target="copilot"><span>02</span> 细节确认</button>
+          <button type="button" data-step-target="protocol"><span>03</span> 实验协议</button>
+          <button type="button" data-step-target="prompt"><span>04</span> 提示词检查</button>
+          <button type="button" data-step-target="model"><span>05</span> 模型与预算</button>
+          <button type="button" data-step-target="preview"><span>06</span> 预实验检查</button>
+          <button type="button" data-step-target="run"><span>07</span> 正式运行</button>
+          <button type="button" data-step-target="results"><span>08</span> 结果报告</button>
+        </nav>
+        <aside class="global-overview" aria-label="当前实验总览">
+          <div class="overview-card-head">
+            <p>当前总览</p>
+            <span data-overview-count>0/8</span>
+          </div>
+          <strong data-overview-title>等待研究需求</strong>
+          <span data-overview-subtitle>先输入研究想法，后续状态会自动更新。</span>
+          <div class="overview-progress" aria-hidden="true"><i data-overview-progress></i></div>
+          <button type="button" data-action="open-overview">查看全局总览</button>
+        </aside>
+        <button type="button" data-action="logout">退出登录</button>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">完整流程</p>
+            <h1 data-page-title>研究需求输入</h1>
+          </div>
+        </header>
+
+        <section class="stage is-active" id="stage-workspace">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">小组工作空间</p>
+              <h2>团队先讨论，再交给细节确认</h2>
+              <p>这里保留上一个人的讨论、材料和决策脉络。成员可以继续补充想法，再一键带入需求输入。</p>
+            </div>
+            <button class="primary" type="button" data-action="use-discussion-as-intake">从讨论生成需求</button>
+          </div>
+
+          <div class="workspace-grid">
+            <div class="panel">
+              <h3>团队成员</h3>
+              <div class="member-list" data-member-list></div>
+              <div class="invite-row">
+                <input data-invite-email placeholder="输入邮箱邀请成员" />
+                <button type="button" data-action="invite-member">邀请成员</button>
+              </div>
+            </div>
+
+            <div class="panel discussion-panel">
+              <h3>团队讨论</h3>
+              <div class="discussion-feed" data-discussion-feed></div>
+              <div class="discussion-composer">
+                <textarea data-discussion-input rows="3" placeholder="继续补充研究想法、实验条件、模型选择或担心的问题。"></textarea>
+                <button class="primary" type="button" data-action="post-discussion">发送</button>
+              </div>
+            </div>
+
+            <div class="panel">
+              <h3>当前项目脉络</h3>
+              <dl class="summary-list">
+                <dt>项目</dt>
+                <dd>LLM 行为实验平台 MVP</dd>
+                <dt>阶段</dt>
+                <dd>共同讨论实验需求</dd>
+                <dt>下一步</dt>
+                <dd>把共识交给细节确认，生成可审查的实验方案。</dd>
+              </dl>
+            </div>
+          </div>
+        </section>
+
+        <section class="stage" id="stage-intake">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">研究需求输入</p>
+              <h2>告诉我们你想做什么实验</h2>
+              <p>请尽量详细地叙述你想做的实验，我们会帮你拆解并提供初步实验方案供您确认。</p>
+            </div>
+          </div>
+
+          <div class="intake-composer panel">
+            <label class="field intake-field">
+              <span>研究想法、实验需求或已有方案</span>
+              <textarea
+                data-input-content
+                rows="6"
+                placeholder="写下你想研究的问题，或粘贴已有方案、提示词草稿、论文方法段。"
+              ></textarea>
+            </label>
+
+            <div class="attachments" data-attachment-list></div>
+
+            <div class="composer-toolbar">
+              <div class="input-tools">
+                <button class="voice-button" type="button" data-action="voice-hold">
+                  <span>按住录音</span>
+                  <small data-voice-status>松开保存音频</small>
+                </button>
+                <label class="file-button">
+                  上传并解析材料
+                  <input type="file" data-file-input multiple accept=".txt,.md,.csv,.json,.doc,.docx,.pdf" />
+                </label>
+              </div>
+
+              <button class="primary submit-button" type="button" data-action="submit-intake">交给我们</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="stage" id="stage-copilot">
+          <div class="copilot-layout">
+            <div class="panel copilot-review">
+              <label class="field review-field">
+                <span>研究目标摘要</span>
+                <textarea data-copilot-summary rows="5"></textarea>
+              </label>
+              <label class="field review-field">
+                <span>假设问题</span>
+                <small>建议写成可以被数据支持或反驳的问句。</small>
+                <textarea data-hypothesis-draft rows="3"></textarea>
+              </label>
+              <h4 data-next-question></h4>
+              <div class="option-list" data-outcome-options></div>
+              <label class="field benchmark-field" data-benchmark-field hidden>
+                <span>基准测试名称或链接</span>
+                <input data-benchmark-input placeholder="例如 MMLU-Pro、BIG-bench、HELM，或粘贴基准测试链接" />
+              </label>
+            </div>
+          </div>
+          <div class="stage-actions copilot-actions">
+            <div>
+              <strong>已确认摘要、假设问题和测量形式</strong>
+              <span>确认后将更新全局总览，并生成实验协议和提示词检查草案。</span>
+            </div>
+            <button class="primary" type="button" data-action="compile-protocol">确认并生成实验协议</button>
+          </div>
+        </section>
+
+        <section class="stage" id="stage-protocol">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">实验协议编译</p>
+              <h2>审查机器可运行的实验协议</h2>
+              <p>先看人类可读摘要，需要时再展开协议 JSON。</p>
+            </div>
+          </div>
+          <div class="two-col">
+            <div class="panel">
+              <h3>研究协议摘要</h3>
+              <dl class="summary-list" data-protocol-summary></dl>
+              <h3>条件矩阵</h3>
+              <div class="condition-grid" data-condition-grid></div>
+            </div>
+            <details class="panel">
+              <summary>协议 JSON</summary>
+              <pre data-protocol-json></pre>
+            </details>
+          </div>
+          <div class="stage-actions protocol-actions">
+            <div>
+              <strong>已审查协议摘要和条件矩阵</strong>
+              <span>确认后进入提示词与条件检查。</span>
+            </div>
+            <button class="primary" type="button" data-action="confirm-protocol">进入提示词检查</button>
+          </div>
+        </section>
+
+        <section class="stage" id="stage-prompt">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">提示词与条件检查</p>
+              <h2>生成提示词并做偏差检查</h2>
+              <p>不同条件只改变理论变量；输出格式固定，便于解析。</p>
+            </div>
+            <button class="primary" type="button" data-action="confirm-prompt">进入模型与预算</button>
+          </div>
+          <div class="two-col">
+            <div class="panel">
+              <h3>提示词版本</h3>
+              <div class="variant-list" data-variant-list></div>
+              <pre class="prompt-preview" data-prompt-preview></pre>
+            </div>
+            <div class="panel">
+              <h3>质量检查</h3>
+              <ul class="check-list" data-prompt-checks></ul>
+              <h3>条件差异</h3>
+              <ul class="plain-list" data-condition-diff></ul>
+            </div>
+          </div>
+        </section>
+
+        <section class="stage" id="stage-model">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">模型与运行设置</p>
+              <h2>设置模型、预算和运行方式</h2>
+              <p>默认内置模拟器可立即跑通。OpenAI 兼容入口用于后续接真实模型。</p>
+            </div>
+            <button class="primary" type="button" data-action="run-preview">运行预实验检查</button>
+          </div>
+
+          <div class="two-col">
+            <div class="panel">
+              <div class="form-grid">
+                <label class="field">
+                  <span>模型</span>
+                  <select data-models-input>
+                    <option value="deepseek" selected>deepseek</option>
+                    <option value="minimax 2.7">minimax 2.7</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>调用方式</span>
+                  <select data-provider>
+                    <option value="simulator">内置模拟器</option>
+                    <option value="openai-compatible">OpenAI 兼容接口</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>预实验每格重复试次</span>
+                  <input data-preview-reps type="number" min="1" max="10" value="3" />
+                </label>
+                <label class="field">
+                  <span>正式每格重复试次</span>
+                  <input data-formal-reps type="number" min="1" max="50" value="6" />
+                </label>
+                <label class="field provider-extra">
+                  <span>接口地址</span>
+                  <input data-endpoint placeholder="https://api.example.com/v1" />
+                </label>
+                <label class="field provider-extra">
+                  <span>API 密钥</span>
+                  <input data-api-key type="password" placeholder="只发送给本地后端，不写入导出" />
+                </label>
+              </div>
+            </div>
+            <div class="panel">
+              <h3>运行计划</h3>
+              <dl class="summary-list" data-run-plan></dl>
+            </div>
+          </div>
+        </section>
+
+        <section class="stage" id="stage-preview">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">预实验质量检查</p>
+              <h2>先检查质量，再决定是否正式运行</h2>
+              <p>这里重点看解析率、异常、成本，而不是做最终结论。</p>
+            </div>
+            <button class="primary" type="button" data-action="run-formal">预实验通过，正式运行</button>
+          </div>
+          <div class="metrics" data-preview-metrics></div>
+          <div class="panel">
+            <h3>预实验响应</h3>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>模型</th>
+                    <th>条件</th>
+                    <th>选择</th>
+                    <th>信心</th>
+                    <th>理由</th>
+                  </tr>
+                </thead>
+                <tbody data-preview-table></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section class="stage" id="stage-run">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">正式运行</p>
+              <h2>正式运行完成</h2>
+              <p>所有原始提示词、原始响应、解析结果、模型参数、成本和时间戳都会进入结果仓库。</p>
+            </div>
+            <button class="primary" type="button" data-action="show-results">查看结果</button>
+          </div>
+          <div class="metrics" data-formal-metrics></div>
+          <div class="panel">
+            <h3>运行日志</h3>
+            <ul class="plain-list" data-run-log></ul>
+          </div>
+        </section>
+
+        <section class="stage" id="stage-results">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">分析与导出</p>
+              <h2>初步分析与可复现导出</h2>
+              <p>报告会明确标注探索性模型行为结果，不把结果等同于人类行为证据。</p>
+            </div>
+            <div class="button-row">
+              <button type="button" data-action="export-markdown">导出报告</button>
+              <button type="button" data-action="export-csv">导出 CSV</button>
+              <button type="button" data-action="export-json">导出复现 JSON</button>
+            </div>
+          </div>
+          <div class="metrics" data-result-metrics></div>
+          <div class="two-col">
+            <div class="panel">
+              <h3>模型摘要</h3>
+              <div data-model-bars></div>
+            </div>
+            <div class="panel">
+              <h3>条件 x 模型</h3>
+              <div class="heatmap" data-heatmap></div>
+            </div>
+          </div>
+          <div class="panel">
+            <h3>报告预览</h3>
+            <pre data-report-preview></pre>
+          </div>
+        </section>
+
+        <div class="overview-backdrop" data-overview-panel hidden>
+          <section class="overview-drawer" role="dialog" aria-modal="true" aria-labelledby="overview-dialog-title">
+            <div class="section-head drawer-head">
+              <div>
+                <p class="eyebrow">全局状态总览</p>
+                <h2 id="overview-dialog-title">当前实验 Overview</h2>
+                <p data-overview-detail>这里不会占用主流程步骤，只帮助你随时确认当前进度、待补充项和下一步。</p>
+              </div>
+              <button type="button" data-action="close-overview">关闭</button>
+            </div>
+            <div class="overview-metrics">
+              <div>
+                <span>当前页面</span>
+                <strong data-overview-current-step>研究需求输入</strong>
+              </div>
+              <div>
+                <span>协议状态</span>
+                <strong data-overview-protocol>未生成</strong>
+              </div>
+              <div>
+                <span>运行状态</span>
+                <strong data-overview-run>未运行</strong>
+              </div>
+            </div>
+            <div class="task-grid overview-task-list" data-task-grid></div>
+          </section>
+        </div>
+      </main>
+    </div>
+
+    <div class="toast" data-toast hidden></div>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

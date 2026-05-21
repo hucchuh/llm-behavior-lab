@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>LLM Behavior Lab Demo</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">LLM Behavior Lab</p>
+          <h1>风险框架效应实验</h1>
+        </div>
+        <div class="topbar-actions" aria-label="运行概览">
+          <span data-protocol-state>draft</span>
+          <span data-run-state>idle</span>
+        </div>
+      </header>
+
+      <aside class="workflow" aria-label="Demo workflow">
+        <button class="is-active" type="button" data-step="intake">
+          <span>01</span>
+          Intake
+        </button>
+        <button type="button" data-step="copilot">
+          <span>02</span>
+          Copilot
+        </button>
+        <button type="button" data-step="breakdown">
+          <span>03</span>
+          Breakdown
+        </button>
+        <button type="button" data-step="prompt">
+          <span>04</span>
+          Prompt Lab
+        </button>
+        <button type="button" data-step="preview">
+          <span>05</span>
+          Preview Run
+        </button>
+        <button type="button" data-step="results">
+          <span>06</span>
+          Results
+        </button>
+      </aside>
+
+      <main class="workspace">
+        <section class="summary-strip" aria-label="实验摘要">
+          <div class="metric">
+            <span>Total calls</span>
+            <strong data-total-calls>0</strong>
+            <small>conditions x models x reps</small>
+          </div>
+          <div class="metric">
+            <span>Max budget</span>
+            <strong data-cost>$0.00</strong>
+            <small>preview estimate</small>
+          </div>
+          <div class="metric">
+            <span>Parse rate</span>
+            <strong data-parse-rate>0%</strong>
+            <small>mock preview quality</small>
+          </div>
+        </section>
+
+        <section class="view" id="view-intake">
+          <div class="section-header">
+            <div>
+              <p class="eyebrow">Research Intake</p>
+              <h2>先用普通输入界面收集研究材料</h2>
+            </div>
+            <div class="button-row">
+              <button type="button" class="primary" data-action="generate">交给 Copilot</button>
+            </div>
+          </div>
+
+          <div class="two-column">
+            <div class="intake-panel">
+              <div class="mode-grid" data-intake-modes></div>
+              <label class="field">
+                <span>Research intent</span>
+                <textarea data-intent rows="8"></textarea>
+              </label>
+            </div>
+
+            <div class="copilot-output">
+              <div>
+                <span>Routing rule</span>
+                <p>无论是文字、语音、上传方案，都会先被转成 Research Intake Object，再进入 Experiment Copilot。</p>
+              </div>
+              <div class="info-grid">
+                <div>
+                  <span>Text</span>
+                  <strong>direct input</strong>
+                </div>
+                <div>
+                  <span>Voice</span>
+                  <strong>transcribe first</strong>
+                </div>
+                <div>
+                  <span>Upload</span>
+                  <strong>extract claims</strong>
+                </div>
+                <div>
+                  <span>Next</span>
+                  <strong>Copilot review</strong>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="view-copilot" hidden>
+          <div class="section-header">
+            <div>
+              <p class="eyebrow">Experiment Copilot</p>
+              <h2>先澄清研究问题，再向后推进</h2>
+            </div>
+            <button type="button" class="primary" data-action="breakdown">确认并拆解任务</button>
+          </div>
+
+          <div class="two-column">
+            <div class="copilot-output">
+              <div>
+                <span>我理解的研究目标</span>
+                <p data-understood></p>
+              </div>
+              <div>
+                <span>Hypothesis draft</span>
+                <p data-hypothesis></p>
+              </div>
+              <div>
+                <span>最高优先级澄清问题</span>
+                <h3 data-top-question></h3>
+                <div class="segmented wide" data-question-options></div>
+              </div>
+            </div>
+
+            <div class="copilot-output">
+              <span>仍需确认</span>
+              <ul class="missing-list" data-missing-list></ul>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="view-breakdown" hidden>
+          <div class="section-header">
+            <div>
+              <p class="eyebrow">Task Breakdown</p>
+              <h2>把实验拆成可确认的任务块</h2>
+            </div>
+            <button type="button" class="primary" data-action="prompt">进入 Prompt Lab</button>
+          </div>
+
+          <div class="two-column">
+            <div>
+              <h3>Task cards</h3>
+              <ul class="task-list" data-task-list></ul>
+            </div>
+            <div>
+              <h3>Protocol snapshot</h3>
+              <div class="condition-grid" data-condition-grid></div>
+              <ul class="model-list" data-model-list></ul>
+            </div>
+          </div>
+
+          <pre class="yaml-preview" data-yaml></pre>
+        </section>
+
+        <section class="view" id="view-prompt" hidden>
+          <div class="section-header">
+            <div>
+              <p class="eyebrow">Prompt & Condition Lab</p>
+              <h2>Prompt 版本和条件平衡检查</h2>
+            </div>
+            <span class="hash" data-prompt-hash></span>
+          </div>
+
+          <div class="prompt-layout">
+            <div class="prompt-panel">
+              <span>System</span>
+              <p data-system-prompt></p>
+              <span>User template</span>
+              <pre data-user-template></pre>
+            </div>
+            <div>
+              <ul class="check-list" data-check-list></ul>
+              <h3>Stage prompt rules</h3>
+              <ul class="stage-prompt-list" data-stage-prompts></ul>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="view-preview" hidden>
+          <div class="section-header">
+            <div>
+              <p class="eyebrow">Run Orchestrator</p>
+              <h2>Preview run 状态</h2>
+            </div>
+            <button type="button" class="primary" data-action="preview">Run Preview</button>
+          </div>
+
+          <div class="run-grid" data-run-cards></div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Model</th>
+                  <th>Condition</th>
+                  <th>Choice</th>
+                  <th>Confidence</th>
+                  <th>Rationale</th>
+                </tr>
+              </thead>
+              <tbody data-response-rows></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="view" id="view-results" hidden>
+          <div class="section-header">
+            <div>
+              <p class="eyebrow">Analysis & Report</p>
+              <h2>模型行为结果摘要</h2>
+            </div>
+            <div class="button-row">
+              <button type="button" data-export="protocol">Protocol YAML</button>
+              <button type="button" data-export="report">Markdown report</button>
+            </div>
+          </div>
+
+          <div class="summary-strip compact" data-result-metrics></div>
+
+          <div class="results-grid">
+            <div class="chart-block">
+              <h3>Risk-seeking by model</h3>
+              <div data-risk-bars></div>
+            </div>
+            <div class="chart-block">
+              <h3>Condition x model heatmap</h3>
+              <div class="heatmap" data-heatmap></div>
+            </div>
+          </div>
+
+          <div class="quality-note">
+            <strong data-failed-parses>0</strong>
+            <span>failed parses retained with raw outputs for audit. Report label: exploratory model behavior.</span>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="./app.mjs"></script>
+  </body>
+</html>
