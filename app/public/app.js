@@ -84,6 +84,14 @@ const els = {
   voiceStatus: document.querySelector("[data-voice-status]"),
   copilotSummary: document.querySelector("[data-copilot-summary]"),
   hypothesisDraft: document.querySelector("[data-hypothesis-draft]"),
+  detailFields: document.querySelectorAll("[data-detail-field]"),
+  confirmationDetails: document.querySelector("[data-confirmation-details]"),
+  researchPanel: document.querySelector("[data-research-panel]"),
+  researchStatus: document.querySelector("[data-research-status]"),
+  researchReason: document.querySelector("[data-research-reason]"),
+  researchQueries: document.querySelector("[data-research-queries]"),
+  researchResults: document.querySelector("[data-research-results]"),
+  researchUse: document.querySelector("[data-research-use]"),
   nextQuestion: document.querySelector("[data-next-question]"),
   outcomeOptions: document.querySelector("[data-outcome-options]"),
   benchmarkField: document.querySelector("[data-benchmark-field]"),
@@ -321,7 +329,7 @@ async function submitIntake() {
     return;
   }
 
-  setBusy("submit-intake", true);
+  setBusy("submit-intake", true, "正在拆解实验方案...");
   try {
     const response = await api("/api/intake", {
       sourceType: state.inputMode,
@@ -329,12 +337,42 @@ async function submitIntake() {
     });
     state.intake = response.intake;
     state.copilot = response.copilot;
-    state.selectedOutcome = response.copilot.nextQuestion.options[0].id;
+    state.selectedOutcome = response.copilot.recommendedOutcome || response.copilot.nextQuestion.options[0].id;
     setStep("copilot");
     showToast("已完成输入解析，请进入细节确认。");
+    loadResearchResults();
   } finally {
     setBusy("submit-intake", false);
     render();
+  }
+}
+
+async function loadResearchResults() {
+  if (!state.intake || !state.copilot) {
+    return;
+  }
+  state.copilot.literatureResearch = {
+    ...(state.copilot.literatureResearch || {}),
+    loading: true,
+  };
+  renderLiteratureResearch();
+  try {
+    const response = await api("/api/research-search", {
+      intake: state.intake,
+      copilot: state.copilot,
+    });
+    state.copilot = response.copilot;
+  } catch (error) {
+    state.copilot.literatureResearch = {
+      ...(state.copilot.literatureResearch || {}),
+      loading: false,
+      error: error.message,
+    };
+  } finally {
+    if (state.copilot?.literatureResearch) {
+      state.copilot.literatureResearch.loading = false;
+    }
+    renderLiteratureResearch();
   }
 }
 
@@ -748,6 +786,11 @@ function renderCopilot() {
 
   els.copilotSummary.value = state.copilot.summary;
   els.hypothesisDraft.value = state.copilot.hypothesisDraft;
+  els.detailFields.forEach((field) => {
+    field.value = state.copilot.detailFields?.[field.dataset.detailField] || "";
+  });
+  renderLiteratureResearch();
+  els.confirmationDetails.value = formatConfirmationDetails(state.copilot.confirmationDetails);
   els.nextQuestion.textContent = state.copilot.nextQuestion.label;
   els.outcomeOptions.innerHTML = state.copilot.nextQuestion.options
     .map(
@@ -790,6 +833,82 @@ function renderOverview() {
   els.overviewCurrentStep.textContent = stepTitles[state.activeStep] || "研究需求输入";
   els.overviewProtocol.textContent = state.protocol ? "已生成" : "未生成";
   els.overviewRun.textContent = state.formalRun ? "正式运行完成" : state.previewRun ? "预实验完成" : "未运行";
+}
+
+function renderLiteratureResearch() {
+  const research = state.copilot?.literatureResearch || {};
+  if (!els.researchPanel) {
+    return;
+  }
+  const queries = Array.isArray(research.queries) && research.queries.length
+    ? research.queries
+    : ["LLM behavior experiment similar study", "large language model benchmark prompt condition"];
+
+  els.researchStatus.textContent = research.loading
+    ? "检索中"
+    : research.needed === false
+      ? "可选调研"
+      : "建议调研";
+  els.researchReason.textContent = research.reason || "先用几条检索式看看是否已有类似实验、benchmark 或条件划分，再决定是否调整方案。";
+  els.researchQueries.innerHTML = queries
+    .map((query) => `<span>${escapeHtml(query)}</span>`)
+    .join("");
+  const results = Array.isArray(research.results) ? research.results : [];
+  els.researchResults.innerHTML = research.loading
+    ? '<div class="research-loading">正在检索 OpenAlex 相关研究...</div>'
+    : results.length
+    ? results
+      .map(
+        (result) => `
+          <a class="research-result-card" href="${escapeHtml(result.url || "#")}" target="_blank" rel="noreferrer">
+            <div class="research-result-head">
+              <strong>${escapeHtml(result.title || "未命名结果")}</strong>
+              ${formatResearchEvidence(result.evidence)}
+            </div>
+            <span>${escapeHtml(formatResearchMeta(result))}</span>
+            ${formatResearchEvidenceReason(result.evidence)}
+            ${result.abstractSnippet ? `<small>${escapeHtml(result.abstractSnippet)}</small>` : ""}
+          </a>
+        `,
+      )
+      .join("")
+    : research.error
+      ? `<div class="research-loading">检索暂时不可用：${escapeHtml(research.error)}</div>`
+      : "";
+  els.researchUse.textContent = research.expectedUse || "调研结果会用于修正条件分组、材料来源、因变量定义和质量检查。";
+}
+
+function formatResearchMeta(result) {
+  const bits = [
+    result.source || "OpenAlex",
+    result.year,
+    Array.isArray(result.authors) && result.authors.length ? result.authors.join(", ") : "",
+    result.venue,
+    Number.isFinite(result.citedByCount) ? `被引 ${result.citedByCount}` : "",
+  ].filter(Boolean);
+  return bits.join(" · ");
+}
+
+function formatResearchEvidence(evidence) {
+  if (!evidence || typeof evidence !== "object") {
+    return "";
+  }
+  const score = Number(evidence.score);
+  if (!Number.isFinite(score)) {
+    return "";
+  }
+  const labels = {
+    high: "高相关",
+    medium: "可参考",
+    low: "待筛选",
+  };
+  const strength = ["high", "medium", "low"].includes(evidence.strength) ? evidence.strength : "low";
+  return `<span class="research-evidence-badge" data-evidence-strength="${strength}">${labels[strength]} ${Math.round(score)}</span>`;
+}
+
+function formatResearchEvidenceReason(evidence) {
+  const reason = Array.isArray(evidence?.reasons) ? evidence.reasons[0] : "";
+  return reason ? `<small class="research-evidence-reason">${escapeHtml(reason)}</small>` : "";
 }
 
 function getOverviewNextAction() {
@@ -845,7 +964,29 @@ function syncCopilotEdits() {
 
   state.copilot.summary = els.copilotSummary.value.trim();
   state.copilot.hypothesisDraft = els.hypothesisDraft.value.trim();
+  state.copilot.detailFields = readDetailFields();
+  state.copilot.confirmationDetails = parseConfirmationDetails(els.confirmationDetails.value);
   state.intake.extractedCandidates.hypothesis[0] = state.copilot.hypothesisDraft;
+  state.intake.unresolvedQuestions = state.copilot.confirmationDetails;
+}
+
+function readDetailFields() {
+  const detailFields = { ...(state.copilot?.detailFields || {}) };
+  els.detailFields.forEach((field) => {
+    detailFields[field.dataset.detailField] = field.value.trim();
+  });
+  return detailFields;
+}
+
+function formatConfirmationDetails(details = []) {
+  return details.map((detail) => `- ${detail}`).join("\n");
+}
+
+function parseConfirmationDetails(value) {
+  return String(value || "")
+    .split("\n")
+    .map((line) => line.replace(/^[-*]\s*/, "").trim())
+    .filter(Boolean);
 }
 
 function renderTasks() {
@@ -1376,12 +1517,12 @@ function exportJson() {
   download("llm-behavior-reproducibility.json", JSON.stringify(payload, null, 2), "application/json");
 }
 
-function setBusy(action, busy) {
+function setBusy(action, busy, busyText = "运行中...") {
   const button = document.querySelector(`[data-action='${action}']`);
   if (!button) return;
   button.disabled = busy;
   button.dataset.originalText ||= button.textContent;
-  button.textContent = busy ? "运行中..." : button.dataset.originalText;
+  button.textContent = busy ? busyText : button.dataset.originalText;
 }
 
 function showToast(message) {

@@ -144,12 +144,7 @@
         </header>
 
         <section class="stage is-active" id="stage-workspace">
-          <div class="section-head">
-            <div>
-              <p class="eyebrow">小组工作空间</p>
-              <h2>团队先讨论，再交给细节确认</h2>
-              <p>这里保留上一个人的讨论、材料和决策脉络。成员可以继续补充想法，再一键带入需求输入。</p>
-            </div>
+          <div class="button-row stage-top-actions">
             <button class="primary" type="button" data-action="use-discussion-as-intake">从讨论生成需求</button>
           </div>
 
@@ -187,14 +182,6 @@
         </section>
 
         <section class="stage" id="stage-intake">
-          <div class="section-head">
-            <div>
-              <p class="eyebrow">研究需求输入</p>
-              <h2>告诉我们你想做什么实验</h2>
-              <p>请尽量详细地叙述你想做的实验，我们会帮你拆解并提供初步实验方案供您确认。</p>
-            </div>
-          </div>
-
           <div class="intake-composer panel">
             <label class="field intake-field">
               <span>研究想法、实验需求或已有方案</span>
@@ -232,15 +219,51 @@
                 <textarea data-copilot-summary rows="5"></textarea>
               </label>
               <label class="field review-field">
-                <span>假设问题</span>
-                <small>建议写成可以被数据支持或反驳的问句。</small>
-                <textarea data-hypothesis-draft rows="3"></textarea>
+                <span>假设问题拆解</span>
+                <small>建议包含可检验问题、自变量、因变量、操作化和计划比较。</small>
+                <textarea data-hypothesis-draft rows="6"></textarea>
               </label>
+              <div class="research-card" data-research-panel>
+                <div class="research-card-head">
+                  <div>
+                    <span>相关研究调研</span>
+                    <small>输入之后、生成方案之前，先给出可快速检索的类似研究方向。</small>
+                  </div>
+                  <strong data-research-status>建议调研</strong>
+                </div>
+                <p data-research-reason></p>
+                <div class="research-query-list" data-research-queries></div>
+                <div class="research-results" data-research-results></div>
+                <p class="research-use" data-research-use></p>
+              </div>
               <h4 data-next-question></h4>
               <div class="option-list" data-outcome-options></div>
               <label class="field benchmark-field" data-benchmark-field hidden>
                 <span>基准测试名称或链接</span>
                 <input data-benchmark-input placeholder="例如 MMLU-Pro、BIG-bench、HELM，或粘贴基准测试链接" />
+              </label>
+              <div class="detail-field-grid">
+                <label class="field review-field">
+                  <span>条件分组</span>
+                  <textarea data-detail-field="variablesAndConditions" rows="4"></textarea>
+                </label>
+                <label class="field review-field">
+                  <span>材料/提示词版本</span>
+                  <textarea data-detail-field="stimuliAndMaterials" rows="4"></textarea>
+                </label>
+                <label class="field review-field">
+                  <span>因变量与评分方式</span>
+                  <textarea data-detail-field="outputAndCoding" rows="4"></textarea>
+                </label>
+                <label class="field review-field detail-field-wide">
+                  <span>预实验计划与质量检查</span>
+                  <textarea data-detail-field="samplingAndRandomization" rows="4"></textarea>
+                </label>
+              </div>
+              <label class="field review-field">
+                <span>运行前需确认的细节</span>
+                <small>这里只放会影响实验设计、运行或结果解释的必要细节。</small>
+                <textarea data-confirmation-details rows="4"></textarea>
               </label>
             </div>
           </div>
@@ -254,13 +277,6 @@
         </section>
 
         <section class="stage" id="stage-protocol">
-          <div class="section-head">
-            <div>
-              <p class="eyebrow">实验协议编译</p>
-              <h2>审查机器可运行的实验协议</h2>
-              <p>先看人类可读摘要，需要时再展开协议 JSON。</p>
-            </div>
-          </div>
           <div class="two-col">
             <div class="panel">
               <h3>研究协议摘要</h3>
@@ -268,10 +284,10 @@
               <h3>条件矩阵</h3>
               <div class="condition-grid" data-condition-grid></div>
             </div>
-            <details class="panel">
-              <summary>协议 JSON</summary>
+            <div class="panel protocol-json-panel">
+              <h3>协议 JSON</h3>
               <pre data-protocol-json></pre>
-            </details>
+            </div>
           </div>
           <div class="stage-actions protocol-actions">
             <div>
@@ -283,14 +299,6 @@
         </section>
 
         <section class="stage" id="stage-prompt">
-          <div class="section-head">
-            <div>
-              <p class="eyebrow">提示词与条件检查</p>
-              <h2>生成提示词并做偏差检查</h2>
-              <p>不同条件只改变理论变量；输出格式固定，便于解析。</p>
-            </div>
-            <button class="primary" type="button" data-action="confirm-prompt">进入模型与预算</button>
-          </div>
           <div class="two-col">
             <div class="panel">
               <h3>提示词版本</h3>
@@ -304,15 +312,17 @@
               <ul class="plain-list" data-condition-diff></ul>
             </div>
           </div>
+          <div class="stage-actions prompt-actions">
+            <div>
+              <strong>已检查提示词版本和条件差异</strong>
+              <span>确认后进入模型、预算和运行方式设置。</span>
+            </div>
+            <button class="primary" type="button" data-action="confirm-prompt">进入模型与预算</button>
+          </div>
         </section>
 
         <section class="stage" id="stage-model">
-          <div class="section-head">
-            <div>
-              <p class="eyebrow">模型与运行设置</p>
-              <h2>设置模型、预算和运行方式</h2>
-              <p>默认内置模拟器可立即跑通。OpenAI 兼容入口用于后续接真实模型。</p>
-            </div>
+          <div class="button-row stage-top-actions">
             <button class="primary" type="button" data-action="run-preview">运行预实验检查</button>
           </div>
 
@@ -359,12 +369,7 @@
         </section>
 
         <section class="stage" id="stage-preview">
-          <div class="section-head">
-            <div>
-              <p class="eyebrow">预实验质量检查</p>
-              <h2>先检查质量，再决定是否正式运行</h2>
-              <p>这里重点看解析率、异常、成本，而不是做最终结论。</p>
-            </div>
+          <div class="button-row stage-top-actions">
             <button class="primary" type="button" data-action="run-formal">预实验通过，正式运行</button>
           </div>
           <div class="metrics" data-preview-metrics></div>
@@ -388,12 +393,7 @@
         </section>
 
         <section class="stage" id="stage-run">
-          <div class="section-head">
-            <div>
-              <p class="eyebrow">正式运行</p>
-              <h2>正式运行完成</h2>
-              <p>所有原始提示词、原始响应、解析结果、模型参数、成本和时间戳都会进入结果仓库。</p>
-            </div>
+          <div class="button-row stage-top-actions">
             <button class="primary" type="button" data-action="show-results">查看结果</button>
           </div>
           <div class="metrics" data-formal-metrics></div>
@@ -404,17 +404,10 @@
         </section>
 
         <section class="stage" id="stage-results">
-          <div class="section-head">
-            <div>
-              <p class="eyebrow">分析与导出</p>
-              <h2>初步分析与可复现导出</h2>
-              <p>报告会明确标注探索性模型行为结果，不把结果等同于人类行为证据。</p>
-            </div>
-            <div class="button-row">
-              <button type="button" data-action="export-markdown">导出报告</button>
-              <button type="button" data-action="export-csv">导出 CSV</button>
-              <button type="button" data-action="export-json">导出复现 JSON</button>
-            </div>
+          <div class="button-row stage-top-actions">
+            <button type="button" data-action="export-markdown">导出报告</button>
+            <button type="button" data-action="export-csv">导出 CSV</button>
+            <button type="button" data-action="export-json">导出复现 JSON</button>
           </div>
           <div class="metrics" data-result-metrics></div>
           <div class="two-col">
