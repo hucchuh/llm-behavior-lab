@@ -19,6 +19,8 @@ const state = {
   intake: null,
   copilot: null,
   tasks: [],
+  generationNote: "",
+  generationTasks: [],
   protocol: null,
   promptLab: null,
   runPlan: null,
@@ -84,8 +86,14 @@ const els = {
   voiceStatus: document.querySelector("[data-voice-status]"),
   copilotSummary: document.querySelector("[data-copilot-summary]"),
   hypothesisDraft: document.querySelector("[data-hypothesis-draft]"),
+  generationStatus: document.querySelector("[data-generation-status]"),
+  planConditions: document.querySelector("[data-plan-conditions]"),
+  planOutcomes: document.querySelector("[data-plan-outcomes]"),
+  planStimuli: document.querySelector("[data-plan-stimuli]"),
+  planComparisons: document.querySelector("[data-plan-comparisons]"),
   detailFields: document.querySelectorAll("[data-detail-field]"),
   confirmationDetails: document.querySelector("[data-confirmation-details]"),
+  generationNote: document.querySelector("[data-generation-note]"),
   researchPanel: document.querySelector("[data-research-panel]"),
   researchStatus: document.querySelector("[data-research-status]"),
   researchReason: document.querySelector("[data-research-reason]"),
@@ -107,6 +115,7 @@ const els = {
   overviewProtocol: document.querySelector("[data-overview-protocol]"),
   overviewRun: document.querySelector("[data-overview-run]"),
   taskGrid: document.querySelector("[data-task-grid]"),
+  taskTray: document.querySelector("[data-task-tray]"),
   protocolSummary: document.querySelector("[data-protocol-summary]"),
   protocolJson: document.querySelector("[data-protocol-json]"),
   conditionGrid: document.querySelector("[data-condition-grid]"),
@@ -306,6 +315,9 @@ function bindEvents() {
 
   els.fileInput.addEventListener("change", handleFile);
   bindVoiceHold();
+  els.generationNote?.addEventListener("input", () => {
+    state.generationNote = els.generationNote.value;
+  });
   els.provider.addEventListener("change", renderProviderFields);
   els.modelsInput.addEventListener("change", updateRunPlan);
   els.previewReps.addEventListener("input", updateRunPlan);
@@ -329,18 +341,43 @@ async function submitIntake() {
     return;
   }
 
+  const taskId = startGenerationTask({
+    key: "intake_breakdown",
+    title: "拆解实验方案",
+    detail: "读取研究需求并准备生成可编辑字段",
+    steps: ["读取输入", "调用拆解逻辑", "生成细节确认"],
+  });
   setBusy("submit-intake", true, "正在拆解实验方案...");
   try {
+    updateGenerationTask(taskId, {
+      activeStep: 1,
+      detail: "正在把自然语言需求转成可执行行为任务",
+    });
     const response = await api("/api/intake", {
       sourceType: state.inputMode,
       content: combinedContent,
     });
+    updateGenerationTask(taskId, {
+      activeStep: 2,
+      detail: "已生成摘要、假设问题和细节确认字段",
+    });
     state.intake = response.intake;
     state.copilot = response.copilot;
+    state.generationNote = "";
     state.selectedOutcome = response.copilot.recommendedOutcome || response.copilot.nextQuestion.options[0].id;
     setStep("copilot");
     showToast("已完成输入解析，请进入细节确认。");
+    finishGenerationTask(taskId, {
+      status: "success",
+      detail: "细节确认草案已生成",
+    });
     loadResearchResults();
+  } catch (error) {
+    finishGenerationTask(taskId, {
+      status: "error",
+      detail: error.message,
+    });
+    showToast(error.message);
   } finally {
     setBusy("submit-intake", false);
     render();
@@ -351,23 +388,41 @@ async function loadResearchResults() {
   if (!state.intake || !state.copilot) {
     return;
   }
+  const taskId = startGenerationTask({
+    key: "related_research",
+    title: "检索相关研究",
+    detail: "按研究问题寻找相似实验、benchmark 和材料线索",
+    steps: ["生成检索式", "检索来源", "整理可用线索"],
+  });
   state.copilot.literatureResearch = {
     ...(state.copilot.literatureResearch || {}),
     loading: true,
   };
   renderLiteratureResearch();
   try {
+    updateGenerationTask(taskId, {
+      activeStep: 1,
+      detail: "正在检索可参考的研究和 benchmark",
+    });
     const response = await api("/api/research-search", {
       intake: state.intake,
       copilot: state.copilot,
     });
     state.copilot = response.copilot;
+    finishGenerationTask(taskId, {
+      status: "success",
+      detail: "相关研究线索已更新到细节确认页",
+    });
   } catch (error) {
     state.copilot.literatureResearch = {
       ...(state.copilot.literatureResearch || {}),
       loading: false,
       error: error.message,
     };
+    finishGenerationTask(taskId, {
+      status: "error",
+      detail: error.message,
+    });
   } finally {
     if (state.copilot?.literatureResearch) {
       state.copilot.literatureResearch.loading = false;
@@ -383,18 +438,34 @@ async function compileProtocol() {
   }
 
   syncCopilotEdits();
+  const taskId = startGenerationTask({
+    key: "protocol_compile",
+    title: "生成实验协议",
+    detail: "把已确认细节编译成协议 JSON 和提示词检查草案",
+    steps: ["收集确认字段", "编译协议 JSON", "生成提示词检查"],
+  });
   setBusy("compile-protocol", true);
   try {
     const models = [els.modelsInput.value].filter(Boolean);
+    updateGenerationTask(taskId, {
+      activeStep: 1,
+      detail: "正在把细节确认字段写入机器可运行协议",
+    });
     const response = await api("/api/protocol", {
       intake: state.intake,
+      copilot: state.copilot,
       decisions: {
         primaryOutcome: state.selectedOutcome,
         repetitionsPerCell: Number(els.formalReps.value),
         models,
         benchmarkReference: els.benchmarkInput.value.trim(),
+        generationNote: state.generationNote,
         useHumanBaseline: false,
       },
+    });
+    updateGenerationTask(taskId, {
+      activeStep: 2,
+      detail: "协议 JSON、条件矩阵和提示词检查已生成",
     });
     state.protocol = response.protocol;
     state.tasks = response.tasks;
@@ -403,6 +474,16 @@ async function compileProtocol() {
     state.selectedVariantId = response.promptLab.recommendedVariantId;
     setStep("protocol");
     showToast("全局总览已更新，实验协议已生成。");
+    finishGenerationTask(taskId, {
+      status: "success",
+      detail: "实验协议已准备审查",
+    });
+  } catch (error) {
+    finishGenerationTask(taskId, {
+      status: "error",
+      detail: error.message,
+    });
+    showToast(error.message);
   } finally {
     setBusy("compile-protocol", false);
     render();
@@ -416,8 +497,18 @@ async function runPreview() {
   }
 
   syncProtocolModels();
+  const taskId = startGenerationTask({
+    key: "preview_run",
+    title: "运行预实验",
+    detail: "用小样本检查解析率、拒答率和异常输出",
+    steps: ["读取运行设置", "执行预实验", "计算质量指标"],
+  });
   setBusy("run-preview", true);
   try {
+    updateGenerationTask(taskId, {
+      activeStep: 1,
+      detail: "正在执行预实验调用",
+    });
     const response = await api("/api/run", {
       protocol: state.protocol,
       runSettings: readRunSettings("preview"),
@@ -426,6 +517,16 @@ async function runPreview() {
     state.previewAnalysis = response.analysis;
     setStep("preview");
     showToast("预实验检查完成。");
+    finishGenerationTask(taskId, {
+      status: "success",
+      detail: "预实验质量指标已生成",
+    });
+  } catch (error) {
+    finishGenerationTask(taskId, {
+      status: "error",
+      detail: error.message,
+    });
+    showToast(error.message);
   } finally {
     setBusy("run-preview", false);
     render();
@@ -439,8 +540,18 @@ async function runFormal() {
   }
 
   syncProtocolModels();
+  const taskId = startGenerationTask({
+    key: "formal_run",
+    title: "正式运行实验",
+    detail: "按条件、模型和重复试次批量执行",
+    steps: ["锁定协议", "批量调用", "整理结果"],
+  });
   setBusy("run-formal", true);
   try {
+    updateGenerationTask(taskId, {
+      activeStep: 1,
+      detail: "正在执行正式实验调用",
+    });
     const response = await api("/api/run", {
       protocol: state.protocol,
       runSettings: readRunSettings("formal"),
@@ -449,6 +560,16 @@ async function runFormal() {
     state.formalAnalysis = response.analysis;
     setStep("run");
     showToast("正式运行已完成。");
+    finishGenerationTask(taskId, {
+      status: "success",
+      detail: "正式运行结果已生成",
+    });
+  } catch (error) {
+    finishGenerationTask(taskId, {
+      status: "error",
+      detail: error.message,
+    });
+    showToast(error.message);
   } finally {
     setBusy("run-formal", false);
     render();
@@ -513,6 +634,7 @@ function render() {
   renderCopilot();
   renderOverview();
   renderTasks();
+  renderGenerationTray();
   renderProtocol();
   renderPromptLab();
   renderProviderFields();
@@ -786,11 +908,16 @@ function renderCopilot() {
 
   els.copilotSummary.value = state.copilot.summary;
   els.hypothesisDraft.value = state.copilot.hypothesisDraft;
+  renderGenerationStatus();
+  renderGeneratedPlan();
   els.detailFields.forEach((field) => {
     field.value = state.copilot.detailFields?.[field.dataset.detailField] || "";
   });
   renderLiteratureResearch();
   els.confirmationDetails.value = formatConfirmationDetails(state.copilot.confirmationDetails);
+  if (els.generationNote && document.activeElement !== els.generationNote) {
+    els.generationNote.value = state.generationNote || state.copilot.generationNote || "";
+  }
   els.nextQuestion.textContent = state.copilot.nextQuestion.label;
   els.outcomeOptions.innerHTML = state.copilot.nextQuestion.options
     .map(
@@ -810,6 +937,83 @@ function renderCopilot() {
     });
   });
   els.benchmarkField.hidden = state.selectedOutcome !== "benchmark_score";
+}
+
+function renderGenerationStatus() {
+  if (!els.generationStatus) {
+    return;
+  }
+  const generation = state.copilot?.generation || {};
+  const isFallback = generation.source === "local_fallback";
+  const isLlm = generation.source === "llm";
+  els.generationStatus.hidden = !generation.source;
+  els.generationStatus.dataset.status = isFallback ? "fallback" : isLlm ? "llm" : "unknown";
+  const reasonMap = {
+    missing_server_api_key: "服务端还没有配置 Copilot 大模型 API key，本页显示的是本地占位拆解。",
+    llm_generation_failed: `大模型拆解失败，已暂用本地占位拆解。${generation.error ? `错误：${generation.error}` : ""}`,
+  };
+  els.generationStatus.innerHTML = isFallback
+    ? `
+      <strong>当前不是大模型生成结果</strong>
+      <span>${escapeHtml(reasonMap[generation.reason] || "当前使用本地占位拆解。")} 复杂问题会显得很泛，需要配置 API 后重新点击“交给我们”。</span>
+    `
+    : `
+      <strong>已调用大模型拆解实验方案</strong>
+      <span>生成链路：${escapeHtml(generation.logicChain || "behavior_task_breakdown")} ${generation.latencyMs ? `· ${Math.round(generation.latencyMs / 100) / 10}s` : ""}</span>
+    `;
+}
+
+function renderGeneratedPlan() {
+  const draft = state.copilot?.experimentDraft || {};
+  const candidates = state.intake?.extractedCandidates || {};
+  const conditions = Array.isArray(draft.conditions) && draft.conditions.length
+    ? draft.conditions
+    : candidates.conditions || [];
+  const outcomes = Array.isArray(draft.dependentVariables) && draft.dependentVariables.length
+    ? draft.dependentVariables
+    : candidates.dependentVariables || [];
+  const stimuli = Array.isArray(draft.stimuli) && draft.stimuli.length
+    ? draft.stimuli
+    : candidates.stimuli || [];
+  const comparisons = Array.isArray(draft.plannedComparisons) && draft.plannedComparisons.length
+    ? draft.plannedComparisons
+    : [];
+
+  if (els.planConditions) {
+    els.planConditions.innerHTML = conditions.length
+      ? conditions.map((condition) => `
+          <article class="plan-card">
+            <strong>${escapeHtml(condition.label || condition.name)}</strong>
+            <div class="plan-chip-list">
+              ${(condition.levels || []).map((level) => `<span>${escapeHtml(level.label || level.id)}</span>`).join("")}
+            </div>
+          </article>
+        `).join("")
+      : '<p class="plan-empty">等待生成条件分组</p>';
+  }
+
+  if (els.planOutcomes) {
+    els.planOutcomes.innerHTML = outcomes.length
+      ? outcomes.map((outcome) => `
+          <article class="plan-card">
+            <strong>${escapeHtml(outcome.label || outcome.name)}</strong>
+            <small>${escapeHtml(outcome.measurementType || state.selectedOutcome || "待选择测量形式")}</small>
+          </article>
+        `).join("")
+      : '<p class="plan-empty">等待生成因变量</p>';
+  }
+
+  if (els.planStimuli) {
+    els.planStimuli.innerHTML = stimuli.length
+      ? stimuli.map((item) => `<span>${escapeHtml(typeof item === "string" ? item : item.title || item.label || item.name)}</span>`).join("")
+      : '<p class="plan-empty">等待生成材料任务</p>';
+  }
+
+  if (els.planComparisons) {
+    els.planComparisons.innerHTML = comparisons.length
+      ? comparisons.map((item) => `<span>${escapeHtml(item)}</span>`).join("")
+      : '<p class="plan-empty">确认条件后生成计划比较</p>';
+  }
 }
 
 function renderOverview() {
@@ -966,6 +1170,14 @@ function syncCopilotEdits() {
   state.copilot.hypothesisDraft = els.hypothesisDraft.value.trim();
   state.copilot.detailFields = readDetailFields();
   state.copilot.confirmationDetails = parseConfirmationDetails(els.confirmationDetails.value);
+  state.generationNote = els.generationNote?.value.trim() || "";
+  state.copilot.generationNote = state.generationNote;
+  state.copilot.recommendedOutcome = state.selectedOutcome;
+  state.copilot.experimentDraft = {
+    ...(state.copilot.experimentDraft || {}),
+    hypothesisQuestion: state.copilot.hypothesisDraft,
+    detailFields: state.copilot.detailFields,
+  };
   state.intake.extractedCandidates.hypothesis[0] = state.copilot.hypothesisDraft;
   state.intake.unresolvedQuestions = state.copilot.confirmationDetails;
 }
@@ -1015,6 +1227,94 @@ function renderTasks() {
       `,
     )
     .join("");
+}
+
+function startGenerationTask({ key, title, detail, steps = [] }) {
+  const runningTask = state.generationTasks.find((taskItem) => taskItem.key === key && taskItem.status === "running");
+  if (runningTask) {
+    updateGenerationTask(runningTask.id, { title, detail, steps, activeStep: 0 });
+    return runningTask.id;
+  }
+
+  const taskItem = {
+    id: `${key}_${Date.now()}`,
+    key,
+    title,
+    detail,
+    steps,
+    activeStep: 0,
+    status: "running",
+    hidden: false,
+    startedAt: Date.now(),
+  };
+  state.generationTasks = [taskItem, ...state.generationTasks.filter((item) => item.key !== key)].slice(0, 5);
+  renderGenerationTray();
+  return taskItem.id;
+}
+
+function updateGenerationTask(id, patch = {}) {
+  state.generationTasks = state.generationTasks.map((taskItem) =>
+    taskItem.id === id ? { ...taskItem, ...patch, hidden: false } : taskItem,
+  );
+  renderGenerationTray();
+}
+
+function finishGenerationTask(id, { status = "success", detail = "" } = {}) {
+  updateGenerationTask(id, {
+    status,
+    detail,
+    activeStep: status === "success"
+      ? Math.max(0, (state.generationTasks.find((taskItem) => taskItem.id === id)?.steps.length || 1) - 1)
+      : state.generationTasks.find((taskItem) => taskItem.id === id)?.activeStep || 0,
+  });
+  if (status === "success") {
+    window.setTimeout(() => {
+      state.generationTasks = state.generationTasks.map((taskItem) =>
+        taskItem.id === id ? { ...taskItem, hidden: true } : taskItem,
+      );
+      renderGenerationTray();
+    }, 4200);
+  }
+}
+
+function renderGenerationTray() {
+  if (!els.taskTray) {
+    return;
+  }
+  const visibleTasks = state.generationTasks.filter((taskItem) => !taskItem.hidden).slice(0, 3);
+  els.taskTray.hidden = visibleTasks.length === 0;
+  els.taskTray.innerHTML = visibleTasks
+    .map((taskItem) => {
+      const stepCount = Math.max(taskItem.steps.length, 1);
+      const progress = taskItem.status === "error"
+        ? Math.max(10, ((taskItem.activeStep + 1) / stepCount) * 100)
+        : ((taskItem.activeStep + 1) / stepCount) * 100;
+      return `
+        <article class="generation-task-card" data-status="${taskItem.status}">
+          <div class="generation-task-head">
+            <span>${generationTaskStatusLabel(taskItem.status)}</span>
+            <strong>${escapeHtml(taskItem.title)}</strong>
+          </div>
+          <p>${escapeHtml(taskItem.detail || "")}</p>
+          <div class="generation-task-progress" aria-hidden="true"><i style="width:${Math.min(100, Math.round(progress))}%"></i></div>
+          <ol>
+            ${taskItem.steps
+              .map(
+                (step, index) =>
+                  `<li class="${index <= taskItem.activeStep ? "is-done" : ""}">${escapeHtml(step)}</li>`,
+              )
+              .join("")}
+          </ol>
+        </article>
+      `;
+    })
+    .join("");
+}
+
+function generationTaskStatusLabel(status) {
+  if (status === "success") return "已完成";
+  if (status === "error") return "需要重试";
+  return "生成中";
 }
 
 function buildOverviewTasks() {

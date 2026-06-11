@@ -214,6 +214,7 @@
         <section class="stage" id="stage-copilot">
           <div class="copilot-layout">
             <div class="panel copilot-review">
+              <div class="generation-status" data-generation-status hidden></div>
               <label class="field review-field">
                 <span>研究目标摘要</span>
                 <textarea data-copilot-summary rows="5"></textarea>
@@ -223,6 +224,30 @@
                 <small>建议包含可检验问题、自变量、因变量、操作化和计划比较。</small>
                 <textarea data-hypothesis-draft rows="6"></textarea>
               </label>
+              <div class="generated-plan">
+                <div class="generated-plan-head">
+                  <span>生成的实验草案</span>
+                  <small>这些结构化内容会进入后续实验协议；下面的文本框用于补充或微调。</small>
+                </div>
+                <div class="plan-grid">
+                  <section>
+                    <h4>条件分组</h4>
+                    <div class="plan-card-list" data-plan-conditions></div>
+                  </section>
+                  <section>
+                    <h4>因变量</h4>
+                    <div class="plan-card-list" data-plan-outcomes></div>
+                  </section>
+                  <section>
+                    <h4>材料任务</h4>
+                    <div class="plan-chip-list" data-plan-stimuli></div>
+                  </section>
+                  <section>
+                    <h4>计划比较</h4>
+                    <div class="plan-chip-list" data-plan-comparisons></div>
+                  </section>
+                </div>
+              </div>
               <div class="research-card" data-research-panel>
                 <div class="research-card-head">
                   <div>
@@ -264,6 +289,11 @@
                 <span>运行前需确认的细节</span>
                 <small>这里只放会影响实验设计、运行或结果解释的必要细节。</small>
                 <textarea data-confirmation-details rows="4"></textarea>
+              </label>
+              <label class="field review-field generation-note-field">
+                <span>本次生成额外注意事项（可选）</span>
+                <small>只影响下一次生成实验协议。可以写你希望系统特别遵守的条件拆分、材料范围或因变量偏好。</small>
+                <textarea data-generation-note rows="3" placeholder="例如：把喝咖啡操作化为“喝咖啡提示 vs 中性提示”，先用经典 benchmark 作为因变量。"></textarea>
               </label>
             </div>
           </div>
@@ -456,6 +486,7 @@
       </main>
     </div>
 
+    <div class="generation-tray" data-task-tray hidden aria-live="polite"></div>
     <div class="toast" data-toast hidden></div>
     <script type="module" src="./app.js"></script>
   </body>

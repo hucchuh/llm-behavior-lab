@@ -6,6 +6,7 @@ const appJs = await readFile(new URL("../public/app.js", import.meta.url), "utf-
 const pipelineJs = await readFile(new URL("../lib/pipeline.mjs", import.meta.url), "utf-8");
 const principlesGuide = await readFile(new URL("../prompts/experiment_design_principles.md", import.meta.url), "utf-8");
 const behaviorPrompt = await readFile(new URL("../prompts/behavior_task_breakdown_system.md", import.meta.url), "utf-8");
+const experimentAlgorithm = await readFile(new URL("../../docs/experiment_algorithm.md", import.meta.url), "utf-8");
 
 const textareaMatch = indexHtml.match(/<textarea[\s\S]*?data-input-content[\s\S]*?>([\s\S]*?)<\/textarea>/);
 const rowsMatch = indexHtml.match(/<textarea[\s\S]*?data-input-content[\s\S]*?rows="(\d+)"/);
@@ -69,6 +70,12 @@ assert.ok(indexHtml.includes("邀请成员"), "workspace should support inviting
 assert.ok(indexHtml.includes("团队讨论"), "workspace should expose shared discussion");
 assert.ok(indexHtml.includes("data-hypothesis-draft"), "previous copilot hypothesis draft field should be restored");
 assert.ok(indexHtml.includes("假设问题拆解"), "detail confirmation should expose hypothesis breakdown");
+assert.ok(indexHtml.includes("data-generation-status"), "detail confirmation should show whether the draft came from the LLM or fallback");
+assert.ok(indexHtml.includes("生成的实验草案"), "detail confirmation should surface a structured generated experiment draft");
+assert.ok(indexHtml.includes("data-plan-conditions"), "detail confirmation should render generated condition groups");
+assert.ok(indexHtml.includes("data-plan-outcomes"), "detail confirmation should render generated outcomes");
+assert.ok(appJs.includes("renderGenerationStatus"), "client should warn when the server falls back without an API key");
+assert.ok(appJs.includes("renderGeneratedPlan"), "client should render the structured experiment draft");
 assert.ok(indexHtml.includes("data-confirmation-details"), "detail confirmation should expose generated confirmation details");
 assert.equal((indexHtml.match(/data-detail-field=/g) || []).length, 4, "detail confirmation should expose four lightweight experiment draft fields");
 assert.ok(indexHtml.includes("条件分组"), "detail confirmation should focus on condition grouping");
@@ -85,6 +92,14 @@ assert.ok(appJs.includes("research-evidence-badge"), "client should render evide
 assert.ok(appJs.includes('api("/api/research-search"'), "client should load literature search separately from intake");
 assert.ok(appJs.includes("loadResearchResults"), "client should defer research loading after the draft appears");
 assert.ok(appJs.includes("检索中"), "client should show an async research loading state");
+assert.ok(indexHtml.includes("data-generation-note"), "detail confirmation should allow optional one-off generation guidance");
+assert.ok(appJs.includes("generationNote"), "client should carry optional generation guidance into protocol generation");
+assert.ok(appJs.includes("startGenerationTask"), "client should expose generation progress while API calls run");
+assert.ok(appJs.includes("renderGenerationTray"), "client should render a lightweight generation task tray");
+assert.ok(indexHtml.includes("data-task-tray"), "page should include the generation task tray mount");
+assert.ok(experimentAlgorithm.includes("design transfer, not feature parity"), "algorithm contract should document design migration rather than feature cloning");
+assert.ok(experimentAlgorithm.includes("End-To-End Contract"), "algorithm contract should define staged input/output contracts");
+assert.ok(experimentAlgorithm.includes("Do not add course outlines"), "algorithm contract should explicitly reject CourseMaker feature parity");
 assert.equal(indexHtml.includes("多智能体协作"), false, "internal agent workflow should not be exposed as page theory");
 assert.equal(indexHtml.includes("内部由三个专职 agent"), false, "detail page should not explain the agent implementation");
 assert.equal(indexHtml.includes("data-agent-workflow"), false, "internal agent workflow should not have a visible render target");

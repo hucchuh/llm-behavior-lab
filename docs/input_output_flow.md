@@ -24,18 +24,20 @@ Backend processing:
 4. Build structured generation messages. The dedicated system prompt keeps the request shorter and more problem-specific; the design-principles file remains the internal methodology reference.
 5. If server credentials are present, call the OpenAI-compatible MiniMax endpoint with JSON-object response mode.
 6. Merge the model draft into the intake and Copilot fields.
-7. If the model call fails, times out, or credentials are missing, return the local fallback so the workflow still runs.
+7. If the model call fails, times out, or credentials are missing, return the local fallback so the workflow still runs, but mark `copilot.generation.source = local_fallback` so the UI can warn that this is not a real model-generated breakdown.
 
 MiniMax configuration:
 - `MINIMAX_API_KEY` or `COPILOT_LLM_API_KEY`
 - `MINIMAX_ENDPOINT` or `COPILOT_LLM_ENDPOINT`, default `https://lightingtheword.com/v1/chat/completions`
 - `MINIMAX_MODEL` or `COPILOT_LLM_MODEL`, default `MiniMax-M2.7`
-- `MINIMAX_TIMEOUT_MS` or `COPILOT_LLM_TIMEOUT_MS`, default `45000`
+- `MINIMAX_TIMEOUT_MS` or `COPILOT_LLM_TIMEOUT_MS`, default `15000`
 
 Latency telemetry:
 - `copilot.generation.latencyMs`
 - `copilot.generation.promptChars`
 - `copilot.generation.rawResponseChars`
+- `copilot.generation.source`: `llm` or `local_fallback`
+- `copilot.generation.reason`: fallback reason such as `missing_server_api_key`
 
 ## 02 细节确认
 
@@ -43,6 +45,7 @@ Backend output to frontend:
 - `intake`: normalized research intent, candidate variables, conditions, stimuli, unresolved details.
 - `copilot.summary`: editable research goal summary.
 - `copilot.hypothesisDraft`: editable hypothesis breakdown containing the testable question, constructs, variables, operationalization, and planned comparison.
+- `copilot.experimentDraft`: structured generated artifact used by later protocol generation, including condition groups, dependent variables, stimuli, and planned comparisons.
 - `copilot.detailFields.variablesAndConditions`: editable variable and condition breakdown. Model names are not treated as condition levels; model selection is handled later.
 - `copilot.detailFields.stimuliAndMaterials`: editable stimulus and material plan.
 - `copilot.detailFields.outputAndCoding`: editable output schema, scoring, and coding plan.
@@ -51,10 +54,13 @@ Backend output to frontend:
 - `copilot.confirmationDetails`: editable list of details that must be confirmed before protocol generation.
 - `copilot.nextQuestion`: primary dependent-variable measurement choice.
 - `copilot.recommendedOutcome`: model-recommended measurement option.
+- `state.generationNote`: optional one-off guidance for the next protocol generation only.
 
 User confirms or edits:
 - 研究目标摘要
 - 假设问题拆解
+- 生成的实验草案：条件分组、因变量、材料任务和计划比较
+- 生成状态：LLM 生成或本地占位 fallback
 - 运行前需确认的细节
 - 主要因变量的测量形式
 - benchmark name or link when benchmark measurement is selected
@@ -63,7 +69,10 @@ Frontend output:
 - Updates `state.copilot`.
 - Updates `state.intake.extractedCandidates.hypothesis[0]`.
 - Updates `state.intake.unresolvedQuestions`.
-- Sends `primaryOutcome`, `benchmarkReference`, model, and repetition decisions to protocol generation.
+- Sends `intake`, `copilot.experimentDraft`, `primaryOutcome`, `benchmarkReference`, `generationNote`, model, and repetition decisions to protocol generation.
+
+Process visibility:
+- The client starts `intake_breakdown`, `related_research`, and `protocol_compile` generation tasks so the user can see which step is active during slow API calls.
 
 ## 03 实验协议
 
@@ -76,6 +85,7 @@ Backend output:
 - `protocol.stimuli`
 - `protocol.outputSchema`
 - `protocol.models`
+- `protocol.reviewNotes.detailFields`: the editable detail-confirmation fields used to compile the protocol.
 - `promptLab`
 - `runPlan`
 

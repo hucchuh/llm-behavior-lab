@@ -113,6 +113,7 @@ async function handleApi(request, response, url, runtime) {
     const designPrinciples = await loadExperimentDesignPrinciples();
     const protocol = compileProtocol({
       intake: body.intake,
+      copilot: body.copilot,
       decisions: body.decisions || {},
     });
     sendJson(response, 200, {
@@ -216,7 +217,7 @@ async function buildGeneratedCopilot({ intake, designPrinciples, behaviorTaskSys
     return {
       ...fallbackCopilot,
       confirmationDetails: fallbackCopilot.confirmationDetails,
-      recommendedOutcome: fallbackCopilot.nextQuestion.options[0].id,
+      recommendedOutcome: fallbackCopilot.recommendedOutcome,
       generation: {
         source: "local_fallback",
         reason: "missing_server_api_key",
@@ -245,7 +246,7 @@ async function buildGeneratedCopilot({ intake, designPrinciples, behaviorTaskSys
     return {
       ...fallbackCopilot,
       confirmationDetails: fallbackCopilot.confirmationDetails,
-      recommendedOutcome: fallbackCopilot.nextQuestion.options[0].id,
+      recommendedOutcome: fallbackCopilot.recommendedOutcome,
       generation: {
         source: "local_fallback",
         reason: "llm_generation_failed",
@@ -423,8 +424,8 @@ function getCopilotLlmConfig(env) {
     endpoint: env.COPILOT_LLM_ENDPOINT || env.MINIMAX_ENDPOINT || "https://lightingtheword.com/v1/chat/completions",
     model: env.COPILOT_LLM_MODEL || env.MINIMAX_MODEL || "MiniMax-M2.7",
     apiKey: env.COPILOT_LLM_API_KEY || env.MINIMAX_API_KEY || "",
-    timeoutMs: Number.parseInt(env.COPILOT_LLM_TIMEOUT_MS || env.MINIMAX_TIMEOUT_MS || "5000", 10),
-    maxTokens: Number.parseInt(env.COPILOT_LLM_MAX_TOKENS || env.MINIMAX_MAX_TOKENS || "1100", 10),
+    timeoutMs: Number.parseInt(env.COPILOT_LLM_TIMEOUT_MS || env.MINIMAX_TIMEOUT_MS || "15000", 10),
+    maxTokens: Number.parseInt(env.COPILOT_LLM_MAX_TOKENS || env.MINIMAX_MAX_TOKENS || "1500", 10),
   };
 }
 

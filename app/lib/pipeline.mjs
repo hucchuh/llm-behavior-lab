@@ -91,6 +91,7 @@ export function createIntake({ sourceType = "text", content = "", text = "", fil
   const hasMoral = /道德|trolley|电车|moral/.test(lower);
   const hasBargain = /ultimatum|最后通牒|分配|博弈|game/.test(lower);
   const hasFairness = /公平|公正|合作|互惠|fairness|cooperation|collaboration/.test(lower);
+  const hasTemporalUnderstanding = /时间|时序|先后|持续|日期|日历|相对时间|绝对时间|temporal|time understanding|time reasoning|duration|timeline|chronology/.test(lower);
   const theme = humanOnlyTreatment
     ? "prompt_manipulation_benchmark"
     : hasRisk
@@ -101,7 +102,9 @@ export function createIntake({ sourceType = "text", content = "", text = "", fil
           ? "ultimatum_game"
           : hasFairness
             ? "fairness_cooperation"
-            : "general_behavior";
+            : hasTemporalUnderstanding
+              ? "temporal_understanding"
+              : "general_behavior";
 
   return {
     id: `intake_${shortId(normalized || fileName || sourceType)}`,
@@ -134,27 +137,27 @@ export function createIntake({ sourceType = "text", content = "", text = "", fil
 
 export function buildCopilot(intake, { designPrinciples = "" } = {}) {
   const candidates = intake.extractedCandidates;
+  const hypothesisBreakdown = {
+    question: toQuestion(candidates.hypothesis[0]),
+    independentVariables: candidates.independentVariables,
+    dependentVariables: candidates.dependentVariables,
+    operationalization: ["把实验条件映射为提示词变量，把模型输出映射为可解析字段。"],
+    plannedComparisons: ["比较不同条件、不同模型及条件 x 模型差异。"],
+  };
   const detailFields = buildCopilotDetailFields({
     intake,
-    hypothesisBreakdown: {
-      plannedComparisons: ["比较不同条件、不同模型及条件 x 模型差异。"],
-    },
+    hypothesisBreakdown,
   });
   const confirmationDetails = buildSpecificConfirmationDetails(intake);
   const literatureResearch = inferLiteratureResearch(intake);
 
   const copilot = {
     summary: buildCopilotSummary(candidates),
-    hypothesisDraft: formatHypothesisBreakdown({
-      question: toQuestion(candidates.hypothesis[0]),
-      independentVariables: candidates.independentVariables,
-      dependentVariables: candidates.dependentVariables,
-      operationalization: ["把实验条件映射为提示词变量，把模型输出映射为可解析字段。"],
-      plannedComparisons: ["比较不同条件、不同模型及条件 x 模型差异。"],
-    }),
+    hypothesisDraft: formatHypothesisBreakdown(hypothesisBreakdown),
     detailFields,
     confirmationDetails,
-    recommendedOutcome: "free_text_coding",
+    recommendedOutcome: inferRecommendedOutcome(intake),
+    experimentDraft: buildExperimentDraft({ intake, hypothesisBreakdown, detailFields }),
     literatureResearch,
     prompts: buildCopilotPromptPackage(intake, { designPrinciples }),
     recognized: {
@@ -323,21 +326,29 @@ export function mergeCopilotDraft(intake, fallbackCopilot, draft = {}) {
 
   const recommendedOutcome = OUTCOME_OPTIONS.includes(normalizedDraft.primaryOutcomeRecommendation)
     ? normalizedDraft.primaryOutcomeRecommendation
-    : fallbackCopilot.nextQuestion.options[0].id;
+    : inferRecommendedOutcome(intake);
+  const detailFields = buildCopilotDetailFields({
+    intake,
+    draftFields: sanitizeDraftDetailFields(normalizedDraft.detailFields),
+    hypothesisBreakdown,
+    independentVariables: meaningfulIndependentVariables,
+    dependentVariables,
+  });
 
   const copilot = {
     ...fallbackCopilot,
     summary: normalizedDraft.researchGoalSummary || fallbackCopilot.summary,
     hypothesisDraft,
-    detailFields: buildCopilotDetailFields({
+    detailFields,
+    confirmationDetails,
+    recommendedOutcome,
+    experimentDraft: buildExperimentDraft({
       intake,
-      draftFields: sanitizeDraftDetailFields(normalizedDraft.detailFields),
       hypothesisBreakdown,
+      detailFields,
       independentVariables: meaningfulIndependentVariables,
       dependentVariables,
     }),
-    confirmationDetails,
-    recommendedOutcome,
     literatureResearch: normalizedDraft.literatureResearch,
     warnings: [
       ...new Set([
@@ -574,6 +585,84 @@ function normalizeDetailFields(fields = {}) {
   };
 }
 
+function buildExperimentDraft({
+  intake,
+  hypothesisBreakdown = {},
+  detailFields = {},
+  independentVariables = [],
+  dependentVariables = [],
+} = {}) {
+  const candidateIndependentVariables = independentVariables.length
+    ? independentVariables
+    : normalizeDraftVariables(hypothesisBreakdown.independentVariables);
+  const candidateDependentVariables = dependentVariables.length
+    ? dependentVariables
+    : normalizeDraftDependentVariables(hypothesisBreakdown.dependentVariables);
+  const conditionsFromVariables = candidateIndependentVariables
+    .filter((variable) => !isModelVariable(variable))
+    .filter((variable) => Array.isArray(variable.levels) && variable.levels.length >= 2)
+    .map((variable) => ({
+      name: variable.name,
+      label: variable.label,
+      levels: variable.levels,
+    }));
+
+  return {
+    researchQuestion: stripTerminalPunctuation(
+      hypothesisBreakdown.question ||
+        intake?.extractedCandidates?.researchQuestion ||
+        "",
+    ),
+    hypothesisQuestion: toQuestion(
+      hypothesisBreakdown.question ||
+        intake?.extractedCandidates?.hypothesis?.[0] ||
+        intake?.extractedCandidates?.researchQuestion,
+    ),
+    constructs: normalizeStringList(hypothesisBreakdown.constructs),
+    independentVariables: (candidateIndependentVariables.length
+      ? candidateIndependentVariables
+      : intake?.extractedCandidates?.independentVariables || []
+    ).map((variable) => ({
+      name: variable.name,
+      label: variable.label,
+      levels: Array.isArray(variable.levels) ? variable.levels : [],
+    })),
+    dependentVariables: (candidateDependentVariables.length
+      ? candidateDependentVariables
+      : intake?.extractedCandidates?.dependentVariables || []
+    ).map((variable) => ({
+      name: variable.name,
+      label: variable.label,
+      measurementType: variable.measurementType || "",
+    })),
+    conditions: conditionsFromVariables.length
+      ? conditionsFromVariables
+      : cloneJson(intake?.extractedCandidates?.conditions || []),
+    stimuli: cloneJson(intake?.extractedCandidates?.stimuli || []),
+    operationalization: normalizeStringList(hypothesisBreakdown.operationalization),
+    plannedComparisons: normalizeStringList(hypothesisBreakdown.plannedComparisons),
+    detailFields: normalizeDetailFields(detailFields),
+  };
+}
+
+function inferRecommendedOutcome(intake) {
+  const text = [
+    intake?.rawContent,
+    intake?.extractedCandidates?.researchQuestion,
+    ...(intake?.extractedCandidates?.dependentVariables || []).flatMap((variable) => [variable.name, variable.label]),
+  ].join(" ");
+  if (isPromptManipulationBenchmarkIntake(intake) || /benchmark|accuracy|pass_rate|正确率|通过率|得分/i.test(text)) {
+    return "benchmark_score";
+  }
+  if (/1-10|likert|rating|评分|打分/i.test(text)) {
+    return "rating_1_10";
+  }
+  if (/A\/B|choice|选择|接受|拒绝|accept|reject/i.test(text)) {
+    return "multiple_choice";
+  }
+  return "free_text_coding";
+}
+
 function buildCopilotDetailFields({
   intake,
   draftFields = {},
@@ -583,6 +672,9 @@ function buildCopilotDetailFields({
 }) {
   if (isPromptManipulationBenchmarkIntake(intake)) {
     return buildPromptManipulationBenchmarkDetailFields({ intake, draftFields, hypothesisBreakdown });
+  }
+  if (isTemporalUnderstandingIntake(intake)) {
+    return buildTemporalUnderstandingDetailFields({ intake, draftFields, hypothesisBreakdown });
   }
 
   const fallbackVariables = independentVariables.length
@@ -614,6 +706,34 @@ function buildCopilotDetailFields({
     analysisAndQA:
       draftFields.analysisAndQA ||
       `计划比较：${normalizeStringList(hypothesisBreakdown.plannedComparisons).join("；") || "条件主效应、模型差异和条件 x 模型交互"}。\n质量检查：解析率、拒答率、字段缺失、条件文本长度和措辞平衡、成本。`,
+  };
+}
+
+function buildTemporalUnderstandingDetailFields({ intake, draftFields = {}, hypothesisBreakdown = {} }) {
+  const condition = intake.extractedCandidates?.conditions?.[0];
+  const levelLabels = condition?.levels?.map((level) => level.label).filter(Boolean) || [
+    "绝对时间识别",
+    "相对时间推理",
+    "事件先后顺序",
+    "持续时间估计",
+  ];
+
+  return {
+    variablesAndConditions:
+      draftFields.variablesAndConditions ||
+      `建议默认，可编辑：这里不是把模型拆成不同“状态”，而是把时间理解拆成可比较的任务维度。条件分组 = ${levelLabels.join(" / ")}；每一组都用同一套输出格式和评分规则。`,
+    stimuliAndMaterials:
+      draftFields.stimuliAndMaterials ||
+      "建议默认，可编辑：为每个时间维度准备 3-5 道小题；题目应控制语言长度和背景知识需求，只改变时间推理类型。例如日期换算、昨天/明天相对推理、事件排序、持续时间计算。",
+    outputAndCoding:
+      draftFields.outputAndCoding ||
+      "因变量备选：accuracy/pass_rate、response_consistency、rationale。若题目有标准答案，优先自动判分；如果需要分析错误类型，可增加 error_type coding schema。",
+    samplingAndRandomization:
+      draftFields.samplingAndRandomization ||
+      "建议默认，可编辑：preview 阶段每个时间维度先跑少量题，检查模型是否按 JSON 输出、是否混淆相对时间参照点；正式运行时随机化题目顺序，并保持各维度题量相同。",
+    analysisAndQA:
+      draftFields.analysisAndQA ||
+      `计划比较：${normalizeStringList(hypothesisBreakdown.plannedComparisons).join("；") || `${levelLabels.join(" vs ")} 的正确率和错误类型差异`}。\n质量检查：确认每组题目难度、长度、日期格式和背景知识需求尽量平衡。`,
   };
 }
 
@@ -670,6 +790,16 @@ function buildSpecificConfirmationDetails(intake) {
       "下游表现用哪个 benchmark 或任务集合衡量？请填写 benchmark 名称、链接，或先使用小型知识问答/推理题集合。",
       "主要指标采用 benchmark score、正确率、通过率，还是模型自评信心？是否保留理由文本作为辅助分析？",
       "同一道 benchmark item 是否在两个 prompt 条件下配对运行，并随机化题目顺序？",
+    ];
+  }
+
+  if (isTemporalUnderstandingIntake(intake)) {
+    return [
+      "是否采用「绝对时间识别 / 相对时间推理 / 事件先后顺序 / 持续时间估计」作为第一版时间理解分组？",
+      "每个时间维度是否都使用相同题量、相同输出格式和可自动判分的标准答案？",
+      "题目中的参照时间是否固定，例如明确给出 today/date，避免模型按运行当天自行推断？",
+      "主要指标采用正确率/通过率，还是同时记录解释一致性和错误类型？",
+      "是否需要先做轻量文献或 benchmark 调研，寻找已有 temporal reasoning/time understanding 题集？",
     ];
   }
 
@@ -763,6 +893,19 @@ function inferLiteratureResearch(intake) {
         `${treatment.treatmentLabel} prompt manipulation LLM evaluation`,
       ],
       expectedUse: "用于确定提示版本如何写、哪些 benchmark 更合适，以及两组材料需要保持哪些控制项一致。",
+    };
+  }
+
+  if (isTemporalUnderstandingIntake(intake)) {
+    return {
+      needed: true,
+      reason: "建议先检索 temporal reasoning/time understanding 相关任务，帮助确定时间维度分组、题目模板和自动判分指标。",
+      queries: [
+        "large language model temporal reasoning benchmark",
+        "LLM time understanding event ordering duration estimation",
+        "temporal reasoning benchmark absolute relative time language model",
+      ],
+      expectedUse: "用于选择绝对时间、相对时间、事件顺序和持续时间估计等分组，并确定可自动判分的题型。",
     };
   }
 
@@ -865,6 +1008,19 @@ function isPromptManipulationBenchmarkIntake(intake) {
   ].join(" ");
   return Boolean(inferHumanOnlyTreatment(text)) ||
     /prompt_manipulation|prompt_condition|cue_condition|cue_group|neutral_control_group|coffee_prompt|caffeine_prompt|sleep_deprivation_prompt/i.test(text);
+}
+
+function isTemporalUnderstandingIntake(intake) {
+  const text = [
+    intake?.rawContent,
+    intake?.extractedCandidates?.researchQuestion,
+    ...(intake?.extractedCandidates?.conditions || []).flatMap((condition) => [
+      condition.name,
+      condition.label,
+      ...(Array.isArray(condition.levels) ? condition.levels.map((level) => level.label) : []),
+    ]),
+  ].join(" ");
+  return /temporal_reasoning|时间理解|相对时间|绝对时间|事件先后|持续时间|time reasoning|time understanding|duration/i.test(text);
 }
 
 function formatCandidateBrief(candidates) {
@@ -990,26 +1146,29 @@ export function buildTaskBreakdown() {
   ];
 }
 
-export function compileProtocol({ intake, decisions = {} }) {
+export function compileProtocol({ intake, copilot = null, decisions = {} }) {
+  const protocolIntake = buildProtocolIntake(intake, copilot);
+  const candidates = protocolIntake.extractedCandidates;
   const primaryOutcome = decisions.primaryOutcome || "free_text_coding";
   const repetitionsPerCell = clampInteger(decisions.repetitionsPerCell, 1, 50, 6);
   const models = normalizeModels(decisions.models);
   const useHumanBaseline = Boolean(decisions.useHumanBaseline);
   const benchmarkReference = normalizeContent(decisions.benchmarkReference || "");
-  const variables = intake.extractedCandidates.independentVariables;
-  const conditions = intake.extractedCandidates.conditions;
-  const stimuli = buildStimuli(intake);
-  const promptVariables = ["scenario", ...variables.map((variable) => variable.name)];
+  const generationNote = normalizeContent(decisions.generationNote || "");
+  const variables = candidates.independentVariables;
+  const conditions = candidates.conditions;
+  const stimuli = buildStimuli(protocolIntake);
+  const promptVariables = ["scenario", ...conditions.map((condition) => condition.name)];
 
   return {
-    id: `exp_${shortId(`${intake.id}_${primaryOutcome}_${models.join("_")}`)}`,
-    title: titleFromQuestion(intake.extractedCandidates.researchQuestion),
-    intakeId: intake.id,
+    id: `exp_${shortId(`${protocolIntake.id}_${primaryOutcome}_${models.join("_")}`)}`,
+    title: titleFromQuestion(candidates.researchQuestion),
+    intakeId: protocolIntake.id,
     language: "zh-CN",
     status: "draft",
     summary: {
-      researchQuestion: intake.extractedCandidates.researchQuestion,
-      hypothesis: intake.extractedCandidates.hypothesis[0],
+      researchQuestion: candidates.researchQuestion,
+      hypothesis: candidates.hypothesis[0],
       primaryOutcome,
       benchmarkReference: primaryOutcome === "benchmark_score" ? benchmarkReference : "",
       useHumanBaseline,
@@ -1043,12 +1202,76 @@ export function compileProtocol({ intake, decisions = {} }) {
       qualityChecks: ["parse_rate", "refusal_rate", "token_cost", "prompt_balance"],
       caution: "exploratory model behavior; not human behavior evidence",
     },
+    reviewNotes: {
+      generationNote,
+      detailFields: normalizeDetailFields(copilot?.detailFields),
+      confirmationDetails: Array.isArray(copilot?.confirmationDetails) ? copilot.confirmationDetails : [],
+    },
     needsReview: [],
     createdAt: new Date().toISOString(),
   };
 }
 
+function buildProtocolIntake(intake, copilot) {
+  const cloned = cloneJson(intake || {});
+  cloned.extractedCandidates = {
+    researchQuestion: "",
+    hypothesis: [],
+    independentVariables: [],
+    dependentVariables: [],
+    conditions: [],
+    stimuli: [],
+    models: DEFAULT_MODELS,
+    analysisHints: [],
+    ...(cloned.extractedCandidates || {}),
+  };
+  const draft = copilot?.experimentDraft && typeof copilot.experimentDraft === "object"
+    ? copilot.experimentDraft
+    : null;
+
+  if (!draft) {
+    return cloned;
+  }
+
+  if (draft.researchQuestion) {
+    cloned.extractedCandidates.researchQuestion = stripTerminalPunctuation(draft.researchQuestion);
+  }
+  if (draft.hypothesisQuestion) {
+    cloned.extractedCandidates.hypothesis = [toQuestion(draft.hypothesisQuestion)];
+  }
+  if (Array.isArray(draft.independentVariables) && draft.independentVariables.length) {
+    cloned.extractedCandidates.independentVariables = draft.independentVariables.map((variable) => ({
+      name: variable.name,
+      label: variable.label,
+    }));
+  }
+  if (Array.isArray(draft.dependentVariables) && draft.dependentVariables.length) {
+    cloned.extractedCandidates.dependentVariables = draft.dependentVariables.map((variable) => ({
+      name: variable.name,
+      label: variable.label,
+      measurementType: variable.measurementType || "",
+    }));
+  }
+  if (Array.isArray(draft.conditions) && draft.conditions.length) {
+    cloned.extractedCandidates.conditions = draft.conditions
+      .filter((condition) => Array.isArray(condition.levels) && condition.levels.length >= 2)
+      .map((condition) => ({
+        name: condition.name,
+        label: condition.label,
+        levels: condition.levels.map((level) => ({
+          id: level.id,
+          label: level.label,
+        })),
+      }));
+  }
+  if (Array.isArray(draft.stimuli) && draft.stimuli.length) {
+    cloned.extractedCandidates.stimuli = draft.stimuli;
+  }
+  return cloned;
+}
+
 export function buildPromptLab(protocol) {
+  const outputInstruction = buildPromptOutputInstruction(protocol.summary.primaryOutcome);
   const variants = [
     {
       id: "direct_json",
@@ -1056,7 +1279,7 @@ export function buildPromptLab(protocol) {
       description: "最稳定，适合批量解析。",
       system: "你是一名行为决策研究的参与者。请按直觉作答，不要解释研究目的。",
       userTemplate:
-        "请阅读以下情境并选择一个选项。\n\n情境：{{scenario}}\n\n请只返回 JSON：{\"choice\":\"A或B\",\"confidence\":1-7,\"rationale\":\"一句话理由\"}",
+        `请阅读以下情境并完成任务。\n\n情境：{{scenario}}\n\n${outputInstruction}`,
     },
     {
       id: "participant_role",
@@ -1064,7 +1287,7 @@ export function buildPromptLab(protocol) {
       description: "更强调被试角色，但可能略增加角色扮演偏差。",
       system: "你正在参加一个匿名行为实验。请像普通参与者一样作答。",
       userTemplate:
-        "任务：阅读情境，选择 A 或 B，并报告 1-7 的信心评分。\n{{scenario}}\n输出 JSON：{\"choice\":\"A或B\",\"confidence\":1-7,\"rationale\":\"一句话理由\"}",
+        `任务：阅读情境并按要求输出。\n{{scenario}}\n${outputInstruction}`,
     },
     {
       id: "minimal_instruction",
@@ -1072,7 +1295,7 @@ export function buildPromptLab(protocol) {
       description: "指令更短，适合检查 wording 稳健性。",
       system: "请完成一个决策任务。",
       userTemplate:
-        "{{scenario}}\n只输出 JSON：{\"choice\":\"A或B\",\"confidence\":1-7,\"rationale\":\"一句话理由\"}",
+        `{{scenario}}\n${outputInstruction}`,
     },
   ];
 
@@ -1091,6 +1314,19 @@ export function buildPromptLab(protocol) {
       note: "仅改变理论变量，保持格式和任务说明一致。",
     })),
   };
+}
+
+function buildPromptOutputInstruction(primaryOutcome) {
+  if (primaryOutcome === "benchmark_score") {
+    return '请只返回 JSON：{"benchmark":"benchmark 名称或任务集","metric":"accuracy 或 score","score":0到1之间的数字,"rationale":"一句话说明"}';
+  }
+  if (primaryOutcome === "rating_1_10") {
+    return '请只返回 JSON：{"rating":1到10之间的数字,"confidence":1到7之间的数字,"rationale":"一句话理由"}';
+  }
+  if (primaryOutcome === "free_text_coding") {
+    return '请只返回 JSON：{"answer":"你的开放回答","confidence":1到7之间的数字,"rationale":"一句话理由"}';
+  }
+  return '请只返回 JSON：{"choice":"A或B","confidence":1到7之间的数字,"rationale":"一句话理由"}';
 }
 
 export function buildRunPlan(protocol, settings = {}) {
@@ -1141,6 +1377,7 @@ export async function runExperiment({ protocol, runSettings = {} }) {
             endpoint: runSettings.endpoint,
             apiKey: runSettings.apiKey,
             modelName: runSettings.modelName || model.name,
+            primaryOutcome: protocol.summary.primaryOutcome,
             model,
             cell,
             repetition,
@@ -1196,6 +1433,7 @@ export function analyzeRun(run) {
       total: rows.length,
       targetChoiceRate: round(rate(rows, (response) => response.parsedResponse.choice === "B")),
       meanConfidence: round(mean(rows.map((response) => Number(response.parsedResponse.confidence) || 0))),
+      meanScore: round(mean(rows.map((response) => Number(response.parsedResponse.score)).filter(Number.isFinite))),
     };
   });
 
@@ -1213,6 +1451,7 @@ export function analyzeRun(run) {
       total: rows.length,
       targetChoiceRate: round(rate(rows, (response) => response.parsedResponse.choice === "B")),
       meanConfidence: round(mean(rows.map((response) => Number(response.parsedResponse.confidence) || 0))),
+      meanScore: round(mean(rows.map((response) => Number(response.parsedResponse.score)).filter(Number.isFinite))),
     };
   });
 
@@ -1385,6 +1624,9 @@ function inferResearchQuestion(theme, content) {
     const [experimentalGroup, controlGroup] = getTreatmentLevelLabels(treatment);
     return `将同一任务拆成${experimentalGroup}与${controlGroup}，是否会影响大语言模型在下游 benchmark 或任务中的表现？`;
   }
+  if (theme === "temporal_understanding") {
+    return "大语言模型在不同时间理解任务维度上的表现是否存在可观察差异？";
+  }
   return content ? `围绕“${truncate(content, 36)}”设计一个 LLM 行为实验。` : "设计一个可运行的 LLM 行为实验。";
 }
 
@@ -1405,6 +1647,9 @@ function inferHypothesis(theme, content = "") {
     const treatment = inferHumanOnlyTreatment(content) || defaultPromptManipulationTreatment();
     const [experimentalGroup, controlGroup] = getTreatmentLevelLabels(treatment);
     return `${experimentalGroup}相比${controlGroup}可能改变模型输出或任务表现；需要比较两组在同一批 benchmark item 上的得分差异。`;
+  }
+  if (theme === "temporal_understanding") {
+    return "不同时间理解维度可能触发不同的模型错误模式；需要把题目按时间维度分组，并比较各组正确率、通过率和解释一致性。";
   }
   return "不同实验条件会导致模型输出分布出现可观察差异。";
 }
@@ -1442,6 +1687,12 @@ function inferIndependentVariables(theme, content = "") {
       { name: "benchmark_item", label: "下游任务题目" },
     ];
   }
+  if (theme === "temporal_understanding") {
+    return [
+      { name: "temporal_reasoning_dimension", label: "时间理解维度" },
+      { name: "item_template", label: "题目模板" },
+    ];
+  }
   return [
     { name: "condition", label: "实验条件" },
     { name: "model", label: "模型" },
@@ -1449,6 +1700,14 @@ function inferIndependentVariables(theme, content = "") {
 }
 
 function inferDependentVariables(theme, content) {
+  if (theme === "temporal_understanding") {
+    return [
+      { name: "accuracy", label: "正确率/通过率" },
+      { name: "response_consistency", label: "回答一致性" },
+      { name: "rationale", label: "一句话解释" },
+    ];
+  }
+
   if (theme === "prompt_manipulation_benchmark") {
     return [
       { name: "benchmark_score", label: "benchmark 得分" },
@@ -1562,6 +1821,20 @@ function inferConditions(theme, content = "") {
       },
     ];
   }
+  if (theme === "temporal_understanding") {
+    return [
+      {
+        name: "temporal_reasoning_dimension",
+        label: "时间理解维度",
+        levels: [
+          { id: "absolute_time", label: "绝对时间识别" },
+          { id: "relative_time", label: "相对时间推理" },
+          { id: "event_order", label: "事件先后顺序" },
+          { id: "duration_estimation", label: "持续时间估计" },
+        ],
+      },
+    ];
+  }
   return [
     {
       name: "condition",
@@ -1598,11 +1871,41 @@ function inferStimuli(theme, content = "") {
   if (theme === "prompt_manipulation_benchmark") {
     return ["经典 benchmark 题目", "小型下游任务题集"];
   }
+  if (theme === "temporal_understanding") {
+    return ["绝对日期/日历换算题", "相对时间推理题", "事件排序题", "持续时间估计题"];
+  }
   return ["示例情境 1", "示例情境 2"];
 }
 
 function buildStimuli(intake) {
   const question = intake.extractedCandidates.researchQuestion;
+  const conditions = Array.isArray(intake.extractedCandidates.conditions)
+    ? intake.extractedCandidates.conditions
+    : [];
+
+  if (isPromptManipulationBenchmarkIntake(intake)) {
+    return [
+      {
+        id: "s001",
+        title: "下游任务模板",
+        baseScenario:
+          `${question}\n请把下面同一道 benchmark 或下游任务 item 放入当前条件对应的提示版本中。任务正文、输出格式和评分规则必须保持一致。`,
+        conditionInstructions: buildConditionInstructions(conditions),
+      },
+    ];
+  }
+
+  if (isTemporalUnderstandingIntake(intake)) {
+    return [
+      {
+        id: "s001",
+        title: "时间理解题目模板",
+        baseScenario:
+          `${question}\n请把每一道题明确标注参照日期或时间线，要求模型返回可自动判分的答案、信心和一句话解释。`,
+        conditionInstructions: buildConditionInstructions(conditions),
+      },
+    ];
+  }
 
   return [
     {
@@ -1611,6 +1914,38 @@ function buildStimuli(intake) {
       baseScenario: `${question} 请在两个选项中选择更符合你直觉的一项。`,
     },
   ];
+}
+
+function buildConditionInstructions(conditions = []) {
+  return Object.fromEntries(
+    conditions.map((condition) => [
+      condition.name,
+      Object.fromEntries(
+        (condition.levels || []).map((level) => [
+          level.id,
+          conditionInstruction(condition, level),
+        ]),
+      ),
+    ]),
+  );
+}
+
+function conditionInstruction(condition, level) {
+  const label = `${condition.label || condition.name}: ${level.label || level.id}`;
+  const lower = label.toLowerCase();
+  if (/咖啡|coffee|caffeine/.test(lower) && !/不喝|neutral|control|对照/.test(lower)) {
+    return `${label}。在任务说明前加入一条轻量状态提示：你刚喝了一杯咖啡，感到清醒专注。不要改变题目正文、答案选项、输出格式或评分规则。`;
+  }
+  if (/咖啡|coffee|caffeine/.test(lower)) {
+    return `${label}。使用中性任务说明，不加入咖啡、提神或状态暗示。题目正文、答案选项、输出格式和评分规则与实验组保持一致。`;
+  }
+  if (/提示|prompt|cue|线索/.test(lower)) {
+    return `${label}。只改变该提示线索，其他任务内容、输出格式和评分规则保持一致。`;
+  }
+  if (/时间|temporal|duration|event_order|relative_time|absolute_time/.test(lower)) {
+    return `${label}。使用该时间理解维度的题目模板；保持输出 JSON、评分规则、题目数量和语言长度尽量一致。`;
+  }
+  return `${label}。`;
 }
 
 function buildOutputSchema(primaryOutcome) {
@@ -1666,7 +2001,7 @@ async function callProvider(options) {
   return callSimulator(options);
 }
 
-async function callOpenAiCompatible({ endpoint, apiKey, modelName, rawPrompt }) {
+async function callOpenAiCompatible({ endpoint, apiKey, modelName, rawPrompt, primaryOutcome }) {
   const started = Date.now();
   try {
     const response = await fetch(resolveChatCompletionsUrl(endpoint), {
@@ -1687,7 +2022,7 @@ async function callOpenAiCompatible({ endpoint, apiKey, modelName, rawPrompt }) 
     });
     const json = await response.json();
     const rawResponse = json.choices?.[0]?.message?.content || JSON.stringify(json);
-    return parseProviderResponse(rawResponse, Date.now() - started, json.usage);
+    return parseProviderResponse(rawResponse, Date.now() - started, json.usage, primaryOutcome);
   } catch (error) {
     return {
       rawResponse: JSON.stringify({ error: error.message }),
@@ -1708,7 +2043,7 @@ function resolveChatCompletionsUrl(endpoint) {
     : `${normalized}/chat/completions`;
 }
 
-function callSimulator({ model, cell, repetition, rawPrompt }) {
+function callSimulator({ model, cell, repetition, rawPrompt, primaryOutcome }) {
   const started = Date.now();
   const cellText = JSON.stringify(cell);
   const targetChoiceBias =
@@ -1718,6 +2053,30 @@ function callSimulator({ model, cell, repetition, rawPrompt }) {
   const pseudo = seededValue(`${model.name}_${cellText}_${repetition}`);
   const choice = pseudo < 0.46 + targetChoiceBias ? "B" : "A";
   const confidence = Math.max(1, Math.min(7, Math.round(4 + pseudo * 3 + (choice === "B" ? 0.4 : 0))));
+  if (primaryOutcome === "benchmark_score") {
+    const promptLift = /prompt|cue|coffee|caffeine|sleep|stress|condition/i.test(cellText) ? 0.04 : 0;
+    const score = round(Math.max(0, Math.min(1, 0.58 + promptLift + (pseudo - 0.5) * 0.24)));
+    const rawResponse = JSON.stringify({
+      benchmark: "preview-mini-benchmark",
+      metric: "score",
+      score,
+      rationale: score >= 0.6
+        ? "当前提示版本下任务表现略高。"
+        : "当前提示版本下任务表现接近基线。",
+    });
+    return {
+      rawResponse,
+      parsedResponse: JSON.parse(rawResponse),
+      parseStatus: "parsed",
+      latencyMs: Date.now() - started,
+      tokenUsage: {
+        input: Math.ceil(rawPrompt.length / 4),
+        output: Math.ceil(rawResponse.length / 4),
+      },
+      estimatedCostUsd: model.estimatedCostPerCallUsd || 0.01,
+      errorType: null,
+    };
+  }
   const rationale = choice === "B"
     ? "该选项在当前表述下更符合任务目标或更积极的行动倾向。"
     : "该选项更保守，倾向于维持确定或默认方案。";
@@ -1737,20 +2096,22 @@ function callSimulator({ model, cell, repetition, rawPrompt }) {
   };
 }
 
-function parseProviderResponse(rawResponse, latencyMs, usage = {}) {
+function parseProviderResponse(rawResponse, latencyMs, usage = {}, primaryOutcome = "multiple_choice") {
   try {
     const parsed = JSON.parse(extractJson(rawResponse));
+    const parsedField = expectedPrimaryField(primaryOutcome);
+    const parsedOk = parsed[parsedField] !== undefined && parsed[parsedField] !== null;
     return {
       rawResponse,
       parsedResponse: parsed,
-      parseStatus: parsed.choice ? "parsed" : "schema_error",
+      parseStatus: parsedOk ? "parsed" : "schema_error",
       latencyMs,
       tokenUsage: {
         input: usage.prompt_tokens || 0,
         output: usage.completion_tokens || 0,
       },
       estimatedCostUsd: 0,
-      errorType: parsed.choice ? null : "schema_error",
+      errorType: parsedOk ? null : "schema_error",
     };
   } catch {
     return {
@@ -1768,10 +2129,17 @@ function parseProviderResponse(rawResponse, latencyMs, usage = {}) {
   }
 }
 
+function expectedPrimaryField(primaryOutcome) {
+  if (primaryOutcome === "benchmark_score") return "score";
+  if (primaryOutcome === "rating_1_10") return "rating";
+  if (primaryOutcome === "free_text_coding") return "answer";
+  return "choice";
+}
+
 function renderScenario(stimulus, cell) {
   const descriptors = Object.entries(cell)
-    .map(([key, value]) => `${key}=${value}`)
-    .join("，");
+    .map(([key, value]) => stimulus.conditionInstructions?.[key]?.[value] || `${key}=${value}`)
+    .join("\n");
   return `${stimulus.baseScenario}\n条件：${descriptors}\nA：选择确定、保守或默认方案。\nB：选择目标、改变或行动方案。`;
 }
 
@@ -1821,6 +2189,10 @@ function check(label, status, detail) {
 
 function normalizeContent(content) {
   return String(content || "").replace(/\s+/g, " ").trim();
+}
+
+function cloneJson(value) {
+  return JSON.parse(JSON.stringify(value || null));
 }
 
 function normalizeStringList(values) {

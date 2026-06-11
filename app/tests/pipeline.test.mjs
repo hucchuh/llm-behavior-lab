@@ -57,11 +57,41 @@ assert.ok(
 assert.ok(impossibleManipulationCopilot.detailFields.variablesAndConditions.includes("模型不能真的喝咖啡"));
 assert.ok(impossibleManipulationCopilot.detailFields.variablesAndConditions.includes("喝咖啡提示"));
 assert.ok(impossibleManipulationCopilot.detailFields.stimuliAndMaterials.includes("不喝咖啡提示"));
+assert.equal(impossibleManipulationCopilot.recommendedOutcome, "benchmark_score");
 assert.equal(impossibleManipulationCopilot.detailFields.variablesAndConditions.includes("模型状态"), false);
 assert.ok(impossibleManipulationCopilot.confirmationDetails.some((detail) => detail.includes("benchmark")));
 assert.ok(impossibleManipulationCopilot.confirmationDetails.some((detail) => detail.includes("喝咖啡提示")));
 assert.equal(impossibleManipulationCopilot.confirmationDetails.some((detail) => detail.includes("角色状态")), false);
 assert.equal(impossibleManipulationCopilot.literatureResearch.queries.length > 0, true);
+
+const coffeeProtocol = compileProtocol({
+  intake: impossibleManipulationIntake,
+  copilot: impossibleManipulationCopilot,
+  decisions: {
+    primaryOutcome: impossibleManipulationCopilot.recommendedOutcome,
+    repetitionsPerCell: 2,
+    models: ["deepseek"],
+  },
+});
+
+assert.equal(coffeeProtocol.summary.primaryOutcome, "benchmark_score");
+assert.equal(coffeeProtocol.design.factors[0].name, "caffeine_prompt_condition");
+assert.ok(coffeeProtocol.stimuli[0].conditionInstructions.caffeine_prompt_condition.caffeine_cue_group);
+assert.ok(buildPromptLab(coffeeProtocol).variants[0].userTemplate.includes('"score"'));
+
+const coffeeRun = await runExperiment({
+  protocol: coffeeProtocol,
+  runSettings: {
+    provider: "simulator",
+    mode: "preview",
+    repetitionsPerCell: 2,
+  },
+});
+const coffeeAnalysis = analyzeRun(coffeeRun);
+
+assert.equal(coffeeRun.responses.length, 4);
+assert.equal(coffeeAnalysis.parseRate, 1);
+assert.equal(Number.isFinite(coffeeRun.responses[0].parsedResponse.score), true);
 
 const humanOnlyTreatmentIntake = createIntake({
   sourceType: "text",
@@ -81,6 +111,21 @@ assert.ok(
 );
 assert.ok(humanOnlyTreatmentCopilot.detailFields.variablesAndConditions.includes("模型不能真的经历"));
 assert.ok(humanOnlyTreatmentCopilot.confirmationDetails.some((detail) => detail.includes("睡眠不足提示")));
+
+const temporalIntake = createIntake({
+  sourceType: "text",
+  content: "我想研究大语言模型对时间的理解是否存在个体化差异，需要按时间理解方式分组。",
+});
+const temporalCopilot = buildCopilot(temporalIntake);
+
+assert.equal(temporalIntake.extractedCandidates.conditions[0].name, "temporal_reasoning_dimension");
+assert.ok(temporalIntake.extractedCandidates.conditions[0].levels.some((level) => level.label.includes("相对时间")));
+assert.ok(temporalIntake.extractedCandidates.conditions[0].levels.some((level) => level.label.includes("事件先后")));
+assert.ok(temporalCopilot.detailFields.variablesAndConditions.includes("不是把模型拆成不同“状态”"));
+assert.ok(temporalCopilot.detailFields.variablesAndConditions.includes("时间理解"));
+assert.ok(temporalCopilot.confirmationDetails.some((detail) => detail.includes("参照时间")));
+assert.equal(temporalCopilot.detailFields.variablesAndConditions.includes("控制条件 / 实验条件"), false);
+assert.equal(temporalCopilot.recommendedOutcome, "benchmark_score");
 
 const copilot = buildCopilot(intake);
 
@@ -266,6 +311,7 @@ const protocol = compileProtocol({
     repetitionsPerCell: 4,
     models: ["Model A", "Model B"],
     useHumanBaseline: true,
+    generationNote: "Use coffee prompt versus neutral prompt as condition wording.",
   },
 });
 
@@ -274,6 +320,7 @@ assert.equal(protocol.models.length, 2);
 assert.equal(protocol.design.repetitionsPerCell, 4);
 assert.equal(protocol.outputSchema.required.includes("choice"), true);
 assert.equal(protocol.design.factors[0].name, "fairness");
+assert.equal(protocol.reviewNotes.generationNote, "Use coffee prompt versus neutral prompt as condition wording.");
 
 const promptLab = buildPromptLab(protocol);
 

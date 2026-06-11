@@ -122,7 +122,7 @@ try {
   assert.equal(capturedLlmRequest.body.model, "MiniMax-M2.7");
   assert.equal(capturedLlmRequest.body.response_format.type, "json_object");
   assert.ok(capturedLlmRequest.body.messages[0].content.includes("Behavior Task Breakdown System Prompt"));
-  assert.equal(capturedLlmRequest.body.max_tokens, 1100);
+  assert.equal(capturedLlmRequest.body.max_tokens, 1500);
   assert.equal(intakeResponse.data.copilot.generation.source, "llm");
   assert.equal(intakeResponse.data.copilot.generation.logicChain, "behavior_task_breakdown_v1");
   assert.equal(Number.isFinite(intakeResponse.data.copilot.generation.latencyMs), true);
@@ -157,6 +157,7 @@ try {
 
   const protocolResponse = await post(`${baseUrl}/api/protocol`, {
     intake: intakeResponse.data.intake,
+    copilot: intakeResponse.data.copilot,
     decisions: {
       primaryOutcome: "target_choice",
       repetitionsPerCell: 2,
@@ -166,6 +167,7 @@ try {
   assert.equal(protocolResponse.ok, true);
   assert.equal(protocolResponse.data.protocol.models.length, 1);
   assert.equal(protocolResponse.data.runPlan.totalCalls, 4);
+  assert.ok(protocolResponse.data.protocol.reviewNotes.detailFields.variablesAndConditions);
 
   const runResponse = await post(`${baseUrl}/api/run`, {
     protocol: protocolResponse.data.protocol,
